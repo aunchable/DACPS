@@ -5,7 +5,7 @@ from collections import namedtuple
 kB = 0.00138064852 # in nm
 VISCOSITY = 1.0
 LIGHT_ACCEL_TIME = 8.0
-PARTICLE_DENSITY = 1.228 * 10^-15 # 1.228 g/cm3 converted to kg/nm^3
+PARTICLE_DENSITY = 1.228 * 10**-15 # 1.228 g/cm3 converted to kg/nm^3
 
 class ColloidalSystem:
     def __init__(self, world_dims, type_infos, type_counts, lj_corr_matrix, target_assembly):
@@ -33,6 +33,9 @@ class ColloidalSystem:
         # For learning
         self.target_assembly = target_assembly
 
+    def set_state(self, init_state):
+        self.state = init_state
+
 
     def step(self, dt, light_mask=[]):
         new_state = np.zeros(shape=(self.num_particles, 6))
@@ -57,7 +60,7 @@ class ColloidalSystem:
             dx, dy = np.random.normal(0, np.sqrt(2 * D * dt), 2)
             dphi = np.random.normal(0, np.sqrt(2 * Dr * dt), 1)
             # a = (2/t^2) * (d - v_i * t)
-            accel[p_idx] += (2 / (dt * dt)) * np.array([d - self.state[p_idx, i + 3] * dt for i, d in enumerate([dx, dy, dphi])]
+            accel[p_idx] += (2 / (dt * dt)) * np.array([d - self.state[p_idx, i + 3] * dt for i, d in enumerate([dx, dy, dphi])])
 
         # Light illumination
         for p_idx in range(self.num_particles):
@@ -81,8 +84,8 @@ class ColloidalSystem:
 
         # Update positions/velocities
         for p_idx in range(self.num_particles):
-            new_state[p_idx, 3:] = self.state[p_idx, 3:] + accel[p_index] * dt
-            new_state[p_idx, :3] = self.state[p_idx, :3] + new_state[p_index, 3:] * dt
+            new_state[p_idx, 3:] = self.state[p_idx, 3:] + accel[p_idx] * dt
+            new_state[p_idx, :3] = self.state[p_idx, :3] + new_state[p_idx, 3:] * dt
             while new_state[p_idx][2] < 0.0:
                 new_state[p_idx][2] += 2 * np.pi
             while new_state[p_idx][2] > 2 * np.pi:
@@ -128,17 +131,18 @@ class ColloidalSystem:
 
 
     def get_type_max_vel(self):
-        type_max_accel = []
-        for i in range(len(self.num_types)):
+        type_max_vel = []
+        for i in range(self.num_types):
             type_max_vel.append(150000.0)
         return type_max_vel
 
     def get_type_mass(self):
         type_mass = []
-        for i in range(len(self.num_types)):
-            type_mass.append(PARTICLE_DENSITY * 4 * np.pi * self.type_radii[i]^3 / 3.0)
+        for i in range(self.num_types):
+            type_mass.append(PARTICLE_DENSITY * 4 * np.pi * self.type_radii[i]**3 / 3.0)
         return type_mass
 
 
     def get_reward(self):
         # TODO(anish)
+        return 1
