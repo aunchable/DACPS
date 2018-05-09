@@ -11,7 +11,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward', 'td_error'))
+                        ('state', 'action', 'next_state', 'reward'))
 
 class ReplayMemory(object):
 
@@ -46,67 +46,144 @@ class DQN(nn.Module):
         x = F.relu(self.fc2(x))
         return self.fc3(x.view(x.size(0), -1))
 
-# Epsilon-greedy action selection using policy_net
-def select_action(policy_net, state, num_actions, device, EPS_START, EPS_END, EPS_DECAY, steps_done):
+class DQNAgent():
+    def __init__(self, cs):
+        self.cs = cs
+        self.num_particles = cs.num_particles
+        self.num_actions = int(2**(self.num_particles) )
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.BATCH_SIZE = 10
+        self.GAMMA = 0.999
+        self.EPS_START = 0.9
+        self.EPS_END = 0.05
+        self.EPS_DECAY = 200
+        self.TARGET_UPDATE = 10
+        self.BUFFER_SIZE = 20
+        self.policy_net = DQN(self.num_actions, self.num_particles).to(self.device)
+        self.target_net = DQN(self.num_actions, self.num_particles).to(self.device)
+        self.optimizer = optim.RMSprop(self.policy_net.parameters())
+        self.memory = ReplayMemory(self.BUFFER_SIZE)
+        self.steps_done = 0
+        self.num_episodes = 5
+        self.num_time_steps = 20
+        self.reward_list = []
 
-    print("STATE")
-    print(state)
+    # Epsilon-greedy action selection using policy_net
+    def select_action(self, state):
 
-    print("policy_net")
-    print (policy_net(state))
+        print("STATE")
+        print(state)
 
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
+        print("policy_net")
+        print (self.policy_net(state))
 
-    if sample > eps_threshold:
-        with torch.no_grad():
-            print("Best Action")
-            print(policy_net(state).max(1)[1].view(1, 1))
-            return policy_net(state).max(1)[1].view(1, 1)
-    else:
-        return torch.tensor([[random.randint(0, num_actions - 1)]], device = device, dtype = torch.long)
+        sample = random.random()
+        eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
+            math.exp(-1. * self.steps_done / self.EPS_DECAY)
 
-def optimize_model(optimizer, memory, device, BATCH_SIZE, policy_net, target_net, GAMMA):
-    if len(memory) < BATCH_SIZE:
-        return
-    transitions = memory.sample(BATCH_SIZE)
-    # Transpose the batch (see http://stackoverflow.com/a/19343/3343043 for
-    # detailed explanation).
-    batch = Transition(*zip(*transitions))
+        if sample > eps_threshold:
+            with torch.no_grad():
+                print("Best Action")
+                print(self.policy_net(state).max(1)[1].view(1, 1))
+                return self.policy_net(state).max(1)[1].view(1, 1)
+        else:
+            return torch.tensor([[random.randint(0, self.num_actions - 1)]], device = self.device, dtype = torch.long)
 
-    # Compute a mask of non-final states and concatenate the batch elements
-    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                          batch.next_state)), device=device, dtype=torch.uint8)
-    non_final_next_states = torch.cat([s for s in batch.next_state
-                                                if s is not None])
+    def optimize_model(self):
 
-    state_batch = torch.cat(batch.state)
-    action_batch = torch.cat(batch.action)
-    reward_batch = torch.cat(batch.reward)
+        if len(self.memory) < self.BATCH_SIZE:
+            return
 
-    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-    # columns of actions taken
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
+        transitions = self.memory.sample(self.BATCH_SIZE)
 
-    # Compute V(s_{t+1}) for all next states.
-    next_state_values = torch.zeros(BATCH_SIZE, device=device)
-    next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach() # max_a' Q^ (psi_new, a' | theta-)
-    # Compute the expected Q values
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch  # gamma max_a' Q^ (psi_new, a' | theta-) + r
+        # Transpose the batch (see http://stackoverflow.com/a/19343/3343043 for
+        # detailed explanation).
+        batch = Transition(*zip(*transitions))
 
-    # Compute Huber loss between gamma max_a' Q^ (psi_new, a' | theta-) + r and Q(psi_old, a* | theta)
-    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+        # Compute a mask of non-final states and concatenate the batch elements
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                              batch.next_state)), device=self.device, dtype=torch.uint8)
+        non_final_next_states = torch.cat([s for s in batch.next_state
+                                                    if s is not None])
 
-    # Optimize the model
-    optimizer.zero_grad()
-    loss.backward()
-    for param in policy_net.parameters():
-        param.grad.data.clamp_(-1, 1)
-    optimizer.step()
+        state_batch = torch.cat(batch.state)
+        action_batch = torch.cat(batch.action)
+        reward_batch = torch.cat(batch.reward)
 
-def run_DQN():
-    # --------------------- Initialize colloidal system ---------------------
+        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+        # columns of actions taken
+        state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+
+        # Compute V(s_{t+1}) for all next states.
+        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
+        next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0].detach() # max_a' Q^ (psi_new, a' | theta-)
+        # Compute the expected Q values
+        expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  # gamma max_a' Q^ (psi_new, a' | theta-) + r
+
+        # Compute Huber loss between gamma max_a' Q^ (psi_new, a' | theta-) + r and Q(psi_old, a* | theta)
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        # Optimize the model
+        self.optimizer.zero_grad()
+        loss.backward()
+        for param in self.policy_net.parameters():
+            param.grad.data.clamp_(-1, 1)
+        self.optimizer.step()
+
+    def train_model(self):
+        for i_episode in range(self.num_episodes):
+            # Initialize the environment and state
+            self.cs.random_initialization()
+
+            state = self.cs.get_state()
+            state = [item for sublist in state for item in sublist]
+            state = torch.tensor([state], device=self.device, dtype = torch.float)
+
+            for t in range(self.num_time_steps):
+                # Select and perform an action
+                action = self.select_action(state)
+                self.steps_done += 1
+                light_mask = ( (((action.item() & (1 << np.arange(self.num_actions)))) > 0).astype(int) ).tolist()
+                self.cs.step(1, light_mask)
+
+                # Get reward
+                reward = self.cs.get_reward()
+                self.reward_list.append(reward)
+                reward = torch.tensor([reward], device=self.device, dtype = torch.float)
+
+                # Observe new state
+                next_state = self.cs.get_state()
+                next_state = [item for sublist in next_state for item in sublist]
+                next_state = torch.tensor([next_state], device=self.device, dtype = torch.float)
+
+                # Compute TD Error
+                state_action_val = self.policy_net(state).gather(1, action)
+                max_target_val = self.target_net(next_state).max(1)[0].detach()
+                td_error = max_target_val*self.GAMMA + reward
+
+                # TODO: actually use td error for prioritized sampling from replay buffer
+
+                # Store the transition in memory
+                self.memory.push(state, action, next_state, reward)
+                print("MEMORY")
+                print(self.memory.position)
+
+                # Move to the next state
+                state = next_state
+
+                # Perform one step of the optimization (on the target network)
+                self.optimize_model()
+
+            # Show reward at end of episode
+            print("Reward: " + str(self.reward_list[-1]) )
+
+            # Update the target network
+            if i_episode % self.TARGET_UPDATE == 0:
+                self.target_net.load_state_dict(self.policy_net.state_dict())
+
+        print('Complete')
+
+if __name__ == "__main__":
     worldsize = [800, 800]
 
     type_infos = [
@@ -132,95 +209,5 @@ def run_DQN():
                          lj_corr_matrix,
                          target_assembly)
 
-    num_particles = cs.num_particles
-    num_actions = int(2**(num_particles) )
-
-    # ---------------------------- Setup DQN --------------------------------
-
-    # # set up matplotlib
-    # is_ipython = 'inline' in matplotlib.get_backend()
-    # if is_ipython:
-    #     from IPython import display
-    #
-    # plt.ion()
-
-    # if gpu is to be used
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # BATCH_SIZE = 128
-    BATCH_SIZE = 10
-    GAMMA = 0.999
-    EPS_START = 0.9
-    EPS_END = 0.05
-    EPS_DECAY = 200
-    TARGET_UPDATE = 10
-    BUFFER_SIZE = 20
-
-    policy_net = DQN(num_actions, num_particles).to(device)
-    target_net = DQN(num_actions, num_particles).to(device)
-    target_net.load_state_dict(policy_net.state_dict())
-    target_net.eval()
-
-    optimizer = optim.RMSprop(policy_net.parameters())
-    memory = ReplayMemory(BUFFER_SIZE)
-
-    steps_done = 0
-
-    num_episodes = 5
-    num_time_steps = 20
-    reward_list = []
-
-    # ---------------------------- Run DQN --------------------------------
-
-    for i_episode in range(num_episodes):
-        # Initialize the environment and state
-        cs.random_initialization()
-
-        state = cs.get_state()
-        state = [item for sublist in state for item in sublist]
-        state = torch.tensor([state], device=device, dtype = torch.float)
-
-        for t in range(0, num_time_steps):
-            # Select and perform an action
-            action = select_action(policy_net, state, num_actions, device, EPS_START, EPS_END, EPS_DECAY, steps_done)
-            steps_done += 1
-            light_mask = ( (((action.item() & (1 << np.arange(num_actions)))) > 0).astype(int) ).tolist()
-            cs.step(1, light_mask)
-
-            reward = cs.get_reward()
-            reward_list.append(reward)
-            reward = torch.tensor([reward], device=device, dtype = torch.float)
-
-            # Observe new state
-            next_state = cs.get_state()
-            next_state = [item for sublist in next_state for item in sublist]
-            next_state = torch.tensor([next_state], device=device, dtype = torch.float)
-
-            # Compute TD Error
-            state_action_val = policy_net(state).gather(1, action)
-            max_target_val = target_net(next_state).max(1)[0].detach()
-            td_error = max_target_val*GAMMA + reward
-
-            # TODO: actually use td error for prioritized sampling from replay buffer
-
-            # Store the transition in memory
-            memory.push(state, action, next_state, reward, td_error)
-            print("MEMORY")
-            print(memory.position)
-
-            # Move to the next state
-            state = next_state
-
-            # Perform one step of the optimization (on the target network)
-            optimize_model(optimizer, memory, device, BATCH_SIZE, policy_net, target_net, GAMMA)
-
-        # Show reward at end of episode
-        print("Reward: " + str(reward_list[-1]) )
-
-        # Update the target network
-        if i_episode % TARGET_UPDATE == 0:
-            target_net.load_state_dict(policy_net.state_dict())
-
-    print('Complete')
-
-run_DQN()
+    agent = DQNAgent(cs)
+    agent.train_model()
