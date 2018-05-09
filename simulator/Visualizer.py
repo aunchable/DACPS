@@ -15,7 +15,7 @@ class Visualizer:
         # Set up canvas
         self.canvas = tk.Canvas(root, width=self.system.world_dims[0], height=self.system.world_dims[1],
                            borderwidth=0, highlightthickness=0, bg="white")
-        self.canvas.grid() 
+        self.canvas.grid()
 
 
     def update(self):
@@ -24,7 +24,7 @@ class Visualizer:
         for i in range(self.system.num_particles):
             x, y, theta, xdot, ydot, thetadot = state[i]
             #TODO refactor Colloidal System to make these lookups not stupid
-            #TODO replace temp values 
+            #TODO replace temp values
             r, type_label = 20, "shiet"+str(i)
 
             self.plot_particle(x, y, theta, xdot, ydot, r, type_label)
@@ -41,6 +41,6 @@ class Visualizer:
         if xdot < 0:
             xedge = int(x - r * cos(vdir))
             yedge = int(y - r * sin(vdir))
-            
+
         self.canvas.create_line(xedge, yedge, xedge + xdot, yedge + ydot, arrow=tk.LAST)
         self.canvas.create_text((x, y), text=label)

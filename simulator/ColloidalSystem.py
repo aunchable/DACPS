@@ -113,9 +113,9 @@ class ColloidalSystem:
 
 
     def random_initialization(self):
-        self.state[:, 0] = np.random((self.num_particles, _)) * self.world_dims[0]
-        self.state[:, 1] = np.random((self.num_particles, _)) * self.world_dims[1]
-        self.state[:, 2] = np.random((self.num_particles, _)) * 2 * np.pi
+        self.state[:, 0] = np.random.random((self.num_particles, )) * self.world_dims[0]
+        self.state[:, 1] = np.random.random((self.num_particles, )) * self.world_dims[1]
+        self.state[:, 2] = np.random.random((self.num_particles, )) * 2 * np.pi
         self.state[:, 3:] = 0
         return
 

@@ -17,13 +17,13 @@ type_infos = [
 type_counts = [1, 1, 1]
 
 lj_corr_matrix = [
-    [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())], 
-    [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())], 
+    [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
+    [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
 ]
 
 #TODO: not do this
-target_assembly = None 
+target_assembly = None
 
 cs = ColloidalSystem(worldsize,
                      type_infos,
