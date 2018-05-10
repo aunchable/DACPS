@@ -5,10 +5,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 from collections import namedtuple
 from simulator.ColloidalSystem import ColloidalSystem
+from simulator.Visualizer import Visualizer
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import time
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -49,6 +51,7 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
+        self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.num_actions = int(2**(self.num_particles) )
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -140,11 +143,22 @@ class DQNAgent():
             state = torch.tensor([state], device=self.device, dtype = torch.float)
 
             for t in range(self.num_time_steps):
+
                 # Select and perform an action
                 action = self.select_action(state)
                 self.steps_done += 1
                 light_mask = ( (((action.item() & (1 << np.arange(self.num_actions)))) > 0).astype(int) ).tolist()
+
+                # Add visualization
+                if t % (self.num_time_steps/10) == 0:
+                    self.viz.update()
+
+                # Do action
                 self.cs.step(1, light_mask)
+
+                # Add visualization
+                if t % (self.num_time_steps/10) == 0:
+                    time.sleep(1)
 
                 # Get reward
                 reward = self.cs.get_reward()

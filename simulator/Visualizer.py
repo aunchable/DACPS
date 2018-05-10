@@ -8,7 +8,7 @@ class Visualizer:
 
     def __init__(self, colloidal_system):
         self.system = colloidal_system
-        
+
         root = tk.Tk()
         root.wm_title("Colloidal System Simulation")
         self.window = root
