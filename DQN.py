@@ -68,17 +68,17 @@ class DQNAgent():
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
         self.num_episodes = 5
-        self.num_time_steps = 20
+        self.num_time_steps = 1000
         self.reward_list = []
 
     # Epsilon-greedy action selection using policy_net
     def select_action(self, state):
 
-        print("STATE")
-        print(state)
-
-        print("policy_net")
-        print (self.policy_net(state))
+        # print("STATE")
+        # print(state)
+        #
+        # print("policy_net")
+        # print (self.policy_net(state))
 
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
@@ -86,8 +86,8 @@ class DQNAgent():
 
         if sample > eps_threshold:
             with torch.no_grad():
-                print("Best Action")
-                print(self.policy_net(state).max(1)[1].view(1, 1))
+                # print("Best Action")
+                # print(self.policy_net(state).max(1)[1].view(1, 1))
                 return self.policy_net(state).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[random.randint(0, self.num_actions - 1)]], device = self.device, dtype = torch.long)
@@ -135,6 +135,7 @@ class DQNAgent():
 
     def train_model(self):
         for i_episode in range(self.num_episodes):
+            print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
             self.cs.random_initialization()
 
@@ -147,18 +148,20 @@ class DQNAgent():
                 # Select and perform an action
                 action = self.select_action(state)
                 self.steps_done += 1
-                light_mask = ( (((action.item() & (1 << np.arange(self.num_actions)))) > 0).astype(int) ).tolist()
+                light_mask = (( (((action.item() & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
+                # print("LIGHT MASK")
+                # print(light_mask)
 
                 # Add visualization
-                if t % (self.num_time_steps/10) == 0:
-                    self.viz.update()
+                # if t % (self.num_time_steps/10) == 0:
+                # self.viz.update()
 
                 # Do action
                 self.cs.step(1, light_mask)
 
                 # Add visualization
-                if t % (self.num_time_steps/10) == 0:
-                    time.sleep(1)
+                # if t % (self.num_time_steps/10) == 0:
+                # time.sleep(1)
 
                 # Get reward
                 reward = self.cs.get_reward()
@@ -179,8 +182,8 @@ class DQNAgent():
 
                 # Store the transition in memory
                 self.memory.push(state, action, next_state, reward)
-                print("MEMORY")
-                print(self.memory.position)
+                # print("MEMORY")
+                # print(self.memory.position)
 
                 # Move to the next state
                 state = next_state
@@ -189,13 +192,13 @@ class DQNAgent():
                 self.optimize_model()
 
             # Show reward at end of episode
-            print("Reward: " + str(self.reward_list[-1]) )
+            # print("Reward: " + str(self.reward_list[-1]) )
 
             # Update the target network
             if i_episode % self.TARGET_UPDATE == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
-        print('Complete')
+        # print('Complete')
 
 if __name__ == "__main__":
     worldsize = [800, 800]
