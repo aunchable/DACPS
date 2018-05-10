@@ -1,6 +1,7 @@
 import numpy as np
 import tkinter as tk
 from math import *
+import time
 
 from simulator.Visualizer import Visualizer
 from simulator.ColloidalSystem import ColloidalSystem
@@ -38,11 +39,13 @@ cs.set_state(np.array([
     [600, 400, 0, 0, 0, 0],
 ]))
 
-# let some time pass
-for i in range(10):
-    cs.step(1, [1, 1, 1])
-
-# wut it look like tho
 viz = Visualizer(cs)
 
-viz.update()
+# let some time pass
+for i in range(10):
+    viz.update()
+    cs.step(1, [1, 1, 1])
+    time.sleep(1)
+
+# wut it look like tho
+
