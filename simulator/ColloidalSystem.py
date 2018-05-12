@@ -2,10 +2,11 @@ import numpy as np
 import random
 from collections import namedtuple
 
-kB = 0.00138064852 # in nm
-VISCOSITY = 1.0
-LIGHT_ACCEL_TIME = 8.0
-PARTICLE_DENSITY = 1.228 * 10**-15 # 1.228 g/cm3 converted to kg/nm^3
+kB = 1.38064852e-5 # 1.38 * 10^-23 m^2 kg / (s^2 K) = 1.38 * 10^-5 nm^2 kg / (s^2 K)
+VISCOSITY = 8.9e-13 # 8.90 * 10^-4 Pa-s = 8.90 * 10-13 kg/(nm s^2)
+LIGHT_ACCEL_TIME = 8.0 # in s
+PARTICLE_DENSITY = 1.228e-24 # 1.228 g/cm3 = 1.228 * 10^-24 kg/nm^3
+WATER_DENSITY = 997e-27 # 997 kg/m3 = 997 * 10^-27 kg/nm3
 
 class ColloidalSystem:
     def __init__(self, world_dims, type_infos, type_counts, lj_corr_matrix, target_assembly):
@@ -21,6 +22,9 @@ class ColloidalSystem:
         self.type_light_propensities = [t[2] for t in type_infos]
         self.type_max_vel = self.get_type_max_vel()
         self.type_mass = self.get_type_mass()
+
+        # print(self.type_max_vel)
+        # print(self.type_mass)
 
         # Simulation parameters [Assembly System Parameters]
         self.temp = 0
@@ -38,10 +42,12 @@ class ColloidalSystem:
 
 
     def step(self, dt, light_mask=[]):
+        # print('step')
         new_state = np.zeros(shape=(self.num_particles, 6))
 
         accel = np.zeros(shape=(self.num_particles, 3))
-
+        # print(light_mask)
+        # print(accel)
         # LJ forces
         for p1_idx in range(self.num_particles):
             for p2_idx in range(p1_idx + 1, self.num_particles):
@@ -51,37 +57,49 @@ class ColloidalSystem:
                 acc = -(A * np.power((1/dr2), 6)- B * np.power((1/dr2), 3)) * dr / dr2
                 accel[p1_idx][:2] += acc
                 accel[p2_idx][:2] -= acc
+        # print(accel)
 
         # Brownian motion
+        # Linear = Gaussian with variance 2*D*t
+        #     D = kB * T / (6 * pi * eta * radius)
+        # Angular = Gaussian with variance 2*Dr*t
+        #     D = kB * T / (8 * pi * eta * radius^3)
         for p_idx in range(self.num_particles):
             r = self.type_radii[self.particle_types[p_idx]]
             D = kB * self.temp / (6 * np.pi * VISCOSITY * r)
             Dr = kB * self.temp / (8 * np.pi * VISCOSITY * np.power(r, 3))
             dx, dy = np.random.normal(0, np.sqrt(2 * D * dt), 2)
-            dphi = np.random.normal(0, np.sqrt(2 * Dr * dt), 1)
+            dphi = np.random.normal(0, np.sqrt(2 * Dr * dt), 1)[0]
             # a = (2/t^2) * (d - v_i * t)
             accel[p_idx] += (2 / (dt * dt)) * np.array([d - self.state[p_idx, i + 3] * dt for i, d in enumerate([dx, dy, dphi])])
 
+        # print(accel)
         # Light illumination
         for p_idx in range(self.num_particles):
             if light_mask[p_idx]:
-                type = self.particle_types[p_idx]
+                particle_type = self.particle_types[p_idx]
                 o = self.state[p_idx][2]
-                mult_factor = (self.light_frac) / (self.light_frac + self.type_light_propensities[type])
-                final_velocity = mult_factor  * self.type_max_vel[type] * np.array([np.cos(o), np.sin(o)])
+                mult_factor = (self.light_frac) / (self.light_frac + self.type_light_propensities[particle_type])
+                final_velocity = mult_factor * self.type_max_vel[particle_type] * np.array([np.cos(o), np.sin(o)])
                 accel[p_idx][:2] += (final_velocity - self.state[p_idx, 3:5]) / LIGHT_ACCEL_TIME
 
+        # print(accel)
         # Drag force [Stoke's Law]
         for p_idx in range(self.num_particles):
             r = self.type_radii[self.particle_types[p_idx]]
             D = kB * self.temp / (6 * np.pi * VISCOSITY * r)
             Dr = kB * self.temp / (8 * np.pi * VISCOSITY * np.power(r, 3))
+            # print(D, Dr)
+            # D = 0.47 * WATER_DENSITY * np.pi * r * r * 0.5
             mass = self.type_mass[self.particle_types[p_idx]]
+            # print(D, D * self.state[p_idx][3]**2 / mass)
             moment_of_inertia = 0.4 * mass * r * r
             accel[p_idx][0] -= D * self.state[p_idx][3] / mass
             accel[p_idx][1] -= D * self.state[p_idx][4] / mass
             accel[p_idx][2] -= Dr * self.state[p_idx][5] * r / moment_of_inertia
+        # print(accel)
 
+        # assert(False)
         # Update positions/velocities
         for p_idx in range(self.num_particles):
             new_state[p_idx, 3:] = self.state[p_idx, 3:] + accel[p_idx] * dt
@@ -103,6 +121,7 @@ class ColloidalSystem:
             elif new_state[p_idx][1] > self.world_dims[1]:
                 new_state[p_idx][1] = 2 * self.world_dims[1] - new_state[p_idx][1]
 
+        # print(new_state)
         self.state = new_state
         self.time += dt
         return
@@ -133,7 +152,7 @@ class ColloidalSystem:
     def get_type_max_vel(self):
         type_max_vel = []
         for i in range(self.num_types):
-            type_max_vel.append(150000.0)
+            type_max_vel.append(15000.0)
         return type_max_vel
 
     def get_type_mass(self):

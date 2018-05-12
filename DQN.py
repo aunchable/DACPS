@@ -155,14 +155,14 @@ class DQNAgent():
 
                 # Add visualization
                 # if t % (self.num_time_steps/10) == 0:
-                # self.viz.update()
+                #     self.viz.update()
 
                 # Do action
-                self.cs.step(1, light_mask)
+                self.cs.step(0.01, light_mask)
 
                 # Add visualization
                 # if t % (self.num_time_steps/10) == 0:
-                # time.sleep(1)
+                #     time.sleep(1)
 
                 # Get reward
                 reward = self.cs.get_reward()
@@ -206,9 +206,9 @@ if __name__ == "__main__":
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 10, 420],
-        ["shiet", 20, 420],
-        ["goteem", 30, 420]
+        ["jeb", 1100, 420],
+        ["shiet", 1200, 420],
+        ["goteem", 1300, 420]
     ]
 
     type_counts = [1, 1, 1]
@@ -226,6 +226,7 @@ if __name__ == "__main__":
                          type_counts,
                          lj_corr_matrix,
                          target_assembly)
+    cs.set_temperature(300)
 
     agent = DQNAgent(cs)
     agent.train_model()
