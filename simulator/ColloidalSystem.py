@@ -4,7 +4,7 @@ from collections import namedtuple
 
 kB = 1.38064852e-5 # 1.38 * 10^-23 m^2 kg / (s^2 K) = 1.38 * 10^-5 nm^2 kg / (s^2 K)
 VISCOSITY = 8.9e-13 # 8.90 * 10^-4 Pa-s = 8.90 * 10-13 kg/(nm s^2)
-LIGHT_ACCEL_TIME = 8.0 # in s
+LIGHT_ACCEL_TIME = 1.0 # in s
 PARTICLE_DENSITY = 1.228e-24 # 1.228 g/cm3 = 1.228 * 10^-24 kg/nm^3
 WATER_DENSITY = 997e-27 # 997 kg/m3 = 997 * 10^-27 kg/nm3
 
@@ -46,8 +46,9 @@ class ColloidalSystem:
         new_state = np.zeros(shape=(self.num_particles, 6))
 
         accel = np.zeros(shape=(self.num_particles, 3))
+
         # print(light_mask)
-        # print(accel)
+        # print(accel[0])
         # LJ forces
         for p1_idx in range(self.num_particles):
             for p2_idx in range(p1_idx + 1, self.num_particles):
@@ -57,7 +58,7 @@ class ColloidalSystem:
                 acc = -(A * np.power((1/dr2), 6)- B * np.power((1/dr2), 3)) * dr / dr2
                 accel[p1_idx][:2] += acc
                 accel[p2_idx][:2] -= acc
-        # print(accel)
+        # print(accel[0])
 
         # Brownian motion
         # Linear = Gaussian with variance 2*D*t
@@ -66,14 +67,17 @@ class ColloidalSystem:
         #     D = kB * T / (8 * pi * eta * radius^3)
         for p_idx in range(self.num_particles):
             r = self.type_radii[self.particle_types[p_idx]]
-            D = kB * self.temp / (6 * np.pi * VISCOSITY * r)
-            Dr = kB * self.temp / (8 * np.pi * VISCOSITY * np.power(r, 3))
-            dx, dy = np.random.normal(0, np.sqrt(2 * D * dt), 2)
-            dphi = np.random.normal(0, np.sqrt(2 * Dr * dt), 1)[0]
-            # a = (2/t^2) * (d - v_i * t)
-            accel[p_idx] += (2 / (dt * dt)) * np.array([d - self.state[p_idx, i + 3] * dt for i, d in enumerate([dx, dy, dphi])])
+            gamma = 6 * np.pi * VISCOSITY * r
+            gammar = 8 * np.pi * VISCOSITY * np.power(r, 3)
+            D = kB * self.temp / gamma
+            Dr = kB * self.temp / gammar
 
-        # print(accel)
+            ax = gamma * np.sqrt(2 * D) * np.random.normal(0, 1)
+            ay = gamma * np.sqrt(2 * D) * np.random.normal(0, 1)
+            aphi = gammar * np.sqrt(2 * Dr * r) * np.random.normal(0, 1)
+            accel[p_idx] += np.array([ax, ay, aphi])
+
+        # print(accel[0])
         # Light illumination
         for p_idx in range(self.num_particles):
             if light_mask[p_idx]:
@@ -83,21 +87,22 @@ class ColloidalSystem:
                 final_velocity = mult_factor * self.type_max_vel[particle_type] * np.array([np.cos(o), np.sin(o)])
                 accel[p_idx][:2] += (final_velocity - self.state[p_idx, 3:5]) / LIGHT_ACCEL_TIME
 
-        # print(accel)
+        # print(accel[0])
         # Drag force [Stoke's Law]
         for p_idx in range(self.num_particles):
             r = self.type_radii[self.particle_types[p_idx]]
-            D = kB * self.temp / (6 * np.pi * VISCOSITY * r)
-            Dr = kB * self.temp / (8 * np.pi * VISCOSITY * np.power(r, 3))
+            # D = kB * self.temp / (6 * np.pi * VISCOSITY * r)
+            # Dr = kB * self.temp / (8 * np.pi * VISCOSITY * np.power(r, 3))
             # print(D, Dr)
-            # D = 0.47 * WATER_DENSITY * np.pi * r * r * 0.5
+            D = 0.47 * WATER_DENSITY * np.pi * r * r * 0.5
+            Dr = 0.047 * WATER_DENSITY * np.pi * r * r * 0.5
             mass = self.type_mass[self.particle_types[p_idx]]
             # print(D, D * self.state[p_idx][3]**2 / mass)
             moment_of_inertia = 0.4 * mass * r * r
-            accel[p_idx][0] -= D * self.state[p_idx][3] / mass
-            accel[p_idx][1] -= D * self.state[p_idx][4] / mass
-            accel[p_idx][2] -= Dr * self.state[p_idx][5] * r / moment_of_inertia
-        # print(accel)
+            accel[p_idx][0] -= D * self.state[p_idx][3]**2 / mass
+            accel[p_idx][1] -= D * self.state[p_idx][4]**2 / mass
+            accel[p_idx][2] -= Dr * self.state[p_idx][5]**2 * r / moment_of_inertia
+        # print(accel[0])
 
         # assert(False)
         # Update positions/velocities
@@ -113,15 +118,20 @@ class ColloidalSystem:
         for p_idx in range(self.num_particles):
             if new_state[p_idx][0] < 0:
                 new_state[p_idx][0] = -new_state[p_idx][0]
+                new_state[p_idx][3] = -new_state[p_idx][3]
             elif new_state[p_idx][0] > self.world_dims[0]:
                 new_state[p_idx][0] = 2 * self.world_dims[0] - new_state[p_idx][0]
+                new_state[p_idx][3] = -new_state[p_idx][3]
 
             if new_state[p_idx][1] < 0:
                 new_state[p_idx][1] = -new_state[p_idx][1]
+                new_state[p_idx][4] = -new_state[p_idx][4]
             elif new_state[p_idx][1] > self.world_dims[1]:
                 new_state[p_idx][1] = 2 * self.world_dims[1] - new_state[p_idx][1]
+                new_state[p_idx][4] = -new_state[p_idx][4]
 
-        # print(new_state)
+        # print(self.state[0])
+        # print(new_state[0])
         self.state = new_state
         self.time += dt
         return

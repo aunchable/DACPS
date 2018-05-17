@@ -69,7 +69,7 @@ class DQNAgent():
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
         self.num_episodes = 5
-        self.num_time_steps = 1000
+        self.num_time_steps = 10000
         self.reward_list = []
 
     # Epsilon-greedy action selection using policy_net
@@ -150,19 +150,24 @@ class DQNAgent():
                 action = self.select_action(state)
                 self.steps_done += 1
                 light_mask = (( (((action.item() & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
+                light_mask = [0,0,0]
                 # print("LIGHT MASK")
                 # print(light_mask)
 
                 # Add visualization
-                # if t % (self.num_time_steps/10) == 0:
-                #     self.viz.update()
+                if t % 10 == 0:
+                    self.viz.update()
 
                 # Do action
                 self.cs.step(0.01, light_mask)
 
+                # if t == 3:
+                #     assert(False)
+
                 # Add visualization
-                # if t % (self.num_time_steps/10) == 0:
-                #     time.sleep(1)
+                if t % 10 == 0:
+                    print(t)
+                    time.sleep(0.1)
 
                 # Get reward
                 reward = self.cs.get_reward()
