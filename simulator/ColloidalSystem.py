@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg as la
 import random
 from collections import namedtuple
 
@@ -146,6 +147,8 @@ class ColloidalSystem:
         self.state[:, 1] = np.random.random((self.num_particles, )) * self.world_dims[1]
         self.state[:, 2] = np.random.random((self.num_particles, )) * 2 * np.pi
         self.state[:, 3:] = 0
+        print("STATEEEE")
+        print(self.state)
         return
 
 
@@ -171,7 +174,15 @@ class ColloidalSystem:
             type_mass.append(PARTICLE_DENSITY * 4 * np.pi * self.type_radii[i]**3 / 3.0)
         return type_mass
 
-
     def get_reward(self):
-        # TODO(anish)
-        return 1
+        # TODO(anish) - improve this if needed
+        positions = self.state[:, :2]
+        target_positions = self.target_assembly
+
+        centered_positions = positions - np.mean(positions, axis = 0)
+        centered_target_positions = target_positions - np.mean(target_positions, axis = 0)
+
+        transform = np.array(la.orthogonal_procrustes(centered_positions, centered_target_positions)[0])
+        distance = np.linalg.norm(transform - np.identity(2))
+
+        return distance
