@@ -139,6 +139,7 @@ class DQNAgent():
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
             self.cs.random_initialization()
+            # self.cs.set_state(np.asarray([[400, 400, 0, 0, 0, 0],[450, 400, 0, 0, 0, 0], [400, 450, 0, 0, 0, 0]]))
 
             state = self.cs.get_state()
             state = [item for sublist in state for item in sublist]
@@ -155,17 +156,18 @@ class DQNAgent():
                 # print(light_mask)
 
                 # Add visualization
-                if t % 1000 == 0:
+                if t % 10 == 0:
                     self.viz.update()
 
                 # Do action
-                self.cs.step(0.01, light_mask)
+                for j in range(200):
+                    self.cs.step(0.001, light_mask)
 
                 # if t == 3:
                 #     assert(False)
 
                 # Add visualization
-                if t % 1000 == 0:
+                if t % 10 == 0:
                     print(t)
                     time.sleep(0.1)
 

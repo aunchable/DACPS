@@ -51,15 +51,17 @@ class ColloidalSystem:
         # print(light_mask)
         # print(accel[0])
         # LJ forces
+        # For reference, (eps, sig) for argon-argon is (0.997 kJ/mol, 4.0 angstroms)
         for p1_idx in range(self.num_particles):
             for p2_idx in range(p1_idx + 1, self.num_particles):
-                A, B = self.lj_corr_matrix[self.particle_types[p1_idx]][self.particle_types[p2_idx]]
-                dr = self.state[p1_idx, :2] - self.state[p2_idx, :2]
-                dr2 = np.dot(dr, dr)
-                acc = -(A * np.power((1/dr2), 6)- B * np.power((1/dr2), 3)) * dr / dr2
-                accel[p1_idx][:2] += acc
-                accel[p2_idx][:2] -= acc
-        # print(accel[0])
+                eps, sig = self.lj_corr_matrix[self.particle_types[p1_idx]][self.particle_types[p2_idx]]
+                dxyz = self.state[p1_idx, :2] - self.state[p2_idx, :2]
+                dr = np.sqrt(np.dot(dxyz, dxyz))
+                minusdUrdr = - 48 * eps * (np.power(sig / dr, 12) - np.power(sig / dr, 6)) / dr
+                force = minusdUrdr * dxyz
+                accel[p1_idx][:2] += (force / self.type_mass[self.particle_types[p1_idx]])
+                accel[p2_idx][:2] -= (force / self.type_mass[self.particle_types[p2_idx]])
+        # print(accel)
 
         # Brownian motion
         # Linear = Gaussian with variance 2*D*t
