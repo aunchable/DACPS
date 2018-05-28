@@ -157,24 +157,24 @@ class DQNAgent():
                 light_mask = (( (((action.item() & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
 
                 # Add visualization
-                if t % 10 == 0:
-                    self.viz.update()
+                # if t % 10 == 0:
+                #     self.viz.update()
 
                 # Do action
                 for j in range(200):
                     self.cs.step(0.001, light_mask)
 
                 # Add visualization
-                if t % 10 == 0:
-                    time.sleep(0.1)
+                # if t % 10 == 0:
+                #     time.sleep(0.1)
 
                 # Get reward
                 r_new = self.cs.get_reward()
                 reward = torch.tensor([r_new - r_old], device=self.device, dtype = torch.float)
                 self.reward_list.append(r_new - r_old)
 
-                if t % 10 == 0:
-                    print("Reward: " + str(r_new - r_old))
+                # if t % 10 == 0:
+                #     print("Reward: " + str(r_new - r_old))
 
                 # Observe new state
                 next_state = self.cs.get_state()
@@ -209,6 +209,7 @@ class DQNAgent():
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
             self.final_result_per_episode.append( self.cs.get_reward()  )
+            print("Episode Reward: " + str(self.cs.get_reward()))
 
         pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
 

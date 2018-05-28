@@ -149,8 +149,6 @@ class ColloidalSystem:
         self.state[:, 1] = np.random.random((self.num_particles, )) * self.world_dims[1]
         self.state[:, 2] = np.random.random((self.num_particles, )) * 2 * np.pi
         self.state[:, 3:] = 0
-        print("STATEEEE")
-        print(self.state)
         return
 
 
