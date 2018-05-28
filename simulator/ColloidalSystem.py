@@ -38,6 +38,17 @@ class ColloidalSystem:
         # For learning
         self.target_assembly = target_assembly
 
+        self.Rx, self.Ry = np.average(target_assembly, axis=0)
+        self.Rtheta = np.array([np.arctan2(x - Rx, y - Ry) for (x, y) in target_assembly])
+        self.Rindex = np.argsort(Rtheta)
+        self.Rdelta = np.array([(x - Rx)*(x - Rx) + (y - Ry)*(y - Ry) for (x, y) in target_assembly])
+        self.Rstart = np.where(Rindex == np.argmax(Rdelta))[0][0]
+
+
+
+
+
+
     def set_state(self, init_state):
         self.state = init_state
 
@@ -176,13 +187,14 @@ class ColloidalSystem:
 
     def get_reward(self):
         # TODO(anish) - improve this if needed
-        positions = self.state[:, :2]
-        target_positions = self.target_assembly
-        #
-        # centered_positions = positions - np.mean(positions, axis = 0)
-        # centered_target_positions = target_positions - np.mean(target_positions, axis = 0)
-        #
-        # transform = np.array(la.orthogonal_procrustes(centered_positions, centered_target_positions)[0])
-        # distance = np.linalg.norm(transform - np.identity(2))
-        distance = -sum( (positions[0] - target_positions[0])**2 )
-        return distance
+        shape = self.state[:,:2]
+        xbar, ybar = np.average(shape, axis=0)
+        Stheta = np.array([np.arctan2(x - xbar, y - ybar) for (x, y) in shape])
+        Sindex = np.argsort(Stheta)
+        Sdelta = np.array([(x - xbar)*(x - xbar) + (y - ybar)*(y - ybar) for (x, y) in shape])
+        Sstart = np.where(Sindex == np.argmax(Sdelta))[0][0]
+
+        deltaLoss = np.sum([(self.Rdelta[self.Rindex[(self.Rstart + i) % self.num_particles]] - Sdelta[Sindex[(Sstart + i) % self.num_particles]])**2 for i in range(self.num_particles)])
+        thetaLoss = np.sum([(self.Rtheta[self.Rindex[(self.Rstart + i) % self.num_particles]] - Stheta[Sindex[(Sstart + i) % self.num_particles]])**2 for i in range(self.num_particles)])
+
+        return 0 - deltaLoss - thetaLoss
