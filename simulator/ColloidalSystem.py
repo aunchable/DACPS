@@ -180,11 +180,11 @@ class ColloidalSystem:
         # TODO(anish) - improve this if needed
         positions = self.state[:, :2]
         target_positions = self.target_assembly
-
-        centered_positions = positions - np.mean(positions, axis = 0)
-        centered_target_positions = target_positions - np.mean(target_positions, axis = 0)
-
-        transform = np.array(la.orthogonal_procrustes(centered_positions, centered_target_positions)[0])
-        distance = np.linalg.norm(transform - np.identity(2))
-
+        #
+        # centered_positions = positions - np.mean(positions, axis = 0)
+        # centered_target_positions = target_positions - np.mean(target_positions, axis = 0)
+        #
+        # transform = np.array(la.orthogonal_procrustes(centered_positions, centered_target_positions)[0])
+        # distance = np.linalg.norm(transform - np.identity(2))
+        distance = -sum( (positions[0] - target_positions[0])**2 )
         return distance

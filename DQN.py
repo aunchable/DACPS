@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import time
+import pickle
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -61,16 +62,17 @@ class DQNAgent():
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 200
-        self.TARGET_UPDATE = 1
+        self.TARGET_UPDATE = 10
         self.BUFFER_SIZE = 20
         self.policy_net = DQN(self.num_actions, self.num_particles).to(self.device)
         self.target_net = DQN(self.num_actions, self.num_particles).to(self.device)
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
-        self.num_episodes = 50
-        self.num_time_steps = 10000
+        self.num_episodes = 10000
+        self.num_time_steps = 200
         self.reward_list = []
+        self.final_result_per_episode = []
 
     # Epsilon-greedy action selection using policy_net
     def select_action(self, state):
@@ -139,6 +141,7 @@ class DQNAgent():
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
             self.cs.random_initialization()
+            # self.cs.set_state( np.asarray([[0, 0, 0, 0, 0, 0]])    )
             # self.cs.set_state(np.asarray([[400, 400, 0, 0, 0, 0],[450, 400, 0, 0, 0, 0], [400, 450, 0, 0, 0, 0]]))
 
             state = self.cs.get_state()
@@ -148,18 +151,10 @@ class DQNAgent():
 
             for t in range(self.num_time_steps):
 
-                if t % 100 == 0:
-                    print(t)
-                    # plt.plot(self.reward_list)
-                    # plt.show()
-
                 # Select and perform an action
                 action = self.select_action(state)
                 self.steps_done += 1
                 light_mask = (( (((action.item() & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
-                # light_mask = [0,0,0]
-                # print("LIGHT MASK")
-                # print(light_mask)
 
                 # Add visualization
                 if t % 10 == 0:
@@ -169,9 +164,6 @@ class DQNAgent():
                 for j in range(200):
                     self.cs.step(0.001, light_mask)
 
-                # if t == 3:
-                #     assert(False)
-
                 # Add visualization
                 if t % 10 == 0:
                     time.sleep(0.1)
@@ -180,6 +172,9 @@ class DQNAgent():
                 r_new = self.cs.get_reward()
                 reward = torch.tensor([r_new - r_old], device=self.device, dtype = torch.float)
                 self.reward_list.append(r_new - r_old)
+
+                if t % 10 == 0:
+                    print("Reward: " + str(r_new - r_old))
 
                 # Observe new state
                 next_state = self.cs.get_state()
@@ -213,6 +208,10 @@ class DQNAgent():
             if i_episode % self.TARGET_UPDATE == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
+            self.final_result_per_episode.append( self.cs.get_reward()  )
+
+        pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
+
         # print('Complete')
 
 if __name__ == "__main__":
@@ -221,8 +220,8 @@ if __name__ == "__main__":
     type_infos = [
         # id, radius, propensity
         ["jeb", 1100, 420],
-        ["shiet", 1200, 420],
-        ["goteem", 1300, 420]
+        # ["shiet", 1200, 420],
+        # ["goteem", 1300, 420]
     ]
 
     type_counts = [1]
