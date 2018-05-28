@@ -61,15 +61,15 @@ class DQNAgent():
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 200
-        self.TARGET_UPDATE = 10
+        self.TARGET_UPDATE = 1
         self.BUFFER_SIZE = 20
         self.policy_net = DQN(self.num_actions, self.num_particles).to(self.device)
         self.target_net = DQN(self.num_actions, self.num_particles).to(self.device)
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
-        self.num_episodes = 1
-        self.num_time_steps = 1000000
+        self.num_episodes = 50
+        self.num_time_steps = 10000
         self.reward_list = []
 
     # Epsilon-greedy action selection using policy_net
@@ -144,8 +144,14 @@ class DQNAgent():
             state = self.cs.get_state()
             state = [item for sublist in state for item in sublist]
             state = torch.tensor([state], device=self.device, dtype = torch.float)
+            r_old = self.cs.get_reward()
 
             for t in range(self.num_time_steps):
+
+                if t % 100 == 0:
+                    print(t)
+                    # plt.plot(self.reward_list)
+                    # plt.show()
 
                 # Select and perform an action
                 action = self.select_action(state)
@@ -168,13 +174,12 @@ class DQNAgent():
 
                 # Add visualization
                 if t % 10 == 0:
-                    print(t)
                     time.sleep(0.1)
 
                 # Get reward
-                reward = self.cs.get_reward()
-                self.reward_list.append(reward)
-                reward = torch.tensor([reward], device=self.device, dtype = torch.float)
+                r_new = self.cs.get_reward()
+                reward = torch.tensor([r_new - r_old], device=self.device, dtype = torch.float)
+                self.reward_list.append(r_new - r_old)
 
                 # Observe new state
                 next_state = self.cs.get_state()
@@ -199,6 +204,8 @@ class DQNAgent():
                 # Perform one step of the optimization (on the target network)
                 self.optimize_model()
 
+                r_old = r_new
+
             # Show reward at end of episode
             # print("Reward: " + str(self.reward_list[-1]) )
 
@@ -218,15 +225,17 @@ if __name__ == "__main__":
         ["goteem", 1300, 420]
     ]
 
-    type_counts = [3]
+    type_counts = [1]
 
-    lj_corr_matrix = [
-        [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
-        [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
-        [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
-    ]
+    lj_corr_matrix = [[(np.random.random(), np.random.random())]]
 
-    target_assembly = np.array([[0, 0], [1, 0], [1, 0]])
+    # lj_corr_matrix = [
+    #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
+    #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
+    #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
+    # ]
+
+    target_assembly = np.array([[0, 0]])
 
     cs = ColloidalSystem(worldsize,
                          type_infos,
