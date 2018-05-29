@@ -45,16 +45,13 @@ class ColloidalSystem:
         self.Rstart = np.where(Rindex == np.argmax(Rdelta))[0][0]
 
 
-
-
-
-
     def set_state(self, init_state):
         self.state = init_state
 
 
     def step(self, dt, light_mask=[]):
         # print('step')
+        # print(self.state[0][3:])
         new_state = np.zeros(shape=(self.num_particles, 6))
 
         accel = np.zeros(shape=(self.num_particles, 3))
@@ -72,13 +69,14 @@ class ColloidalSystem:
                 force = minusdUrdr * dxyz
                 accel[p1_idx][:2] += (force / self.type_mass[self.particle_types[p1_idx]])
                 accel[p2_idx][:2] -= (force / self.type_mass[self.particle_types[p2_idx]])
-        # print(accel)
+        # print(accel[0])
 
         # Brownian motion
         # Linear = Gaussian with variance 2*D*t
         #     D = kB * T / (6 * pi * eta * radius)
         # Angular = Gaussian with variance 2*Dr*t
         #     D = kB * T / (8 * pi * eta * radius^3)
+        # m*a = sqrt(2 * gamma * kB * temp) R(t), with R(t) = N(0, dt)
         for p_idx in range(self.num_particles):
             r = self.type_radii[self.particle_types[p_idx]]
             gamma = 6 * np.pi * VISCOSITY * r
@@ -86,9 +84,12 @@ class ColloidalSystem:
             D = kB * self.temp / gamma
             Dr = kB * self.temp / gammar
 
-            ax = gamma * np.sqrt(2 * D) * np.random.normal(0, 1)
-            ay = gamma * np.sqrt(2 * D) * np.random.normal(0, 1)
-            aphi = gammar * np.sqrt(2 * Dr * r) * np.random.normal(0, 1)
+            mass = self.type_mass[self.particle_types[p_idx]]
+            moment_of_inertia = 0.4 * mass * r * r
+
+            ax = gamma * np.sqrt(2 * D) * np.random.normal(0, dt**2) / mass
+            ay = gamma * np.sqrt(2 * D) * np.random.normal(0, dt**2) / mass
+            aphi = gammar * np.sqrt(2 * Dr) * np.random.normal(0, dt**2) / moment_of_inertia
             accel[p_idx] += np.array([ax, ay, aphi])
 
         # print(accel[0])
@@ -102,20 +103,29 @@ class ColloidalSystem:
                 accel[p_idx][:2] += (final_velocity - self.state[p_idx, 3:5]) / LIGHT_ACCEL_TIME
 
         # print(accel[0])
+        # a = np.copy(accel[0])
         # Drag force [Stoke's Law]
         for p_idx in range(self.num_particles):
             r = self.type_radii[self.particle_types[p_idx]]
-            # D = kB * self.temp / (6 * np.pi * VISCOSITY * r)
-            # Dr = kB * self.temp / (8 * np.pi * VISCOSITY * np.power(r, 3))
-            # print(D, Dr)
+            mass = self.type_mass[self.particle_types[p_idx]]
+            moment_of_inertia = 0.4 * mass * r * r
+
+            # C = 6 * np.pi * VISCOSITY * r
+            # Cr = 8 * np.pi * VISCOSITY * np.power(r, 3)
+            # accel[p_idx][0] -= C * self.state[p_idx][3] / mass
+            # accel[p_idx][1] -= C * self.state[p_idx][4] / mass
+            # accel[p_idx][2] -= Cr * self.state[p_idx][5] * r / moment_of_inertia
+
             D = 0.47 * WATER_DENSITY * np.pi * r * r * 0.5
             Dr = 0.047 * WATER_DENSITY * np.pi * r * r * 0.5
             mass = self.type_mass[self.particle_types[p_idx]]
             # print(D, D * self.state[p_idx][3]**2 / mass)
             moment_of_inertia = 0.4 * mass * r * r
-            accel[p_idx][0] -= D * self.state[p_idx][3]**2 / mass
-            accel[p_idx][1] -= D * self.state[p_idx][4]**2 / mass
-            accel[p_idx][2] -= Dr * self.state[p_idx][5]**2 * r / moment_of_inertia
+            accel[p_idx][0] -= np.sign(self.state[p_idx][3]) * D * self.state[p_idx][3]**2 / mass
+            accel[p_idx][1] -= np.sign(self.state[p_idx][4]) * D * self.state[p_idx][4]**2 / mass
+            accel[p_idx][2] -= np.sign(self.state[p_idx][5]) * Dr * self.state[p_idx][5]**2 * np.power(r, 3) / moment_of_inertia
+        # print(self.state[0][3:])
+        # print([c - d for c,d, in zip(accel[0], a)])
         # print(accel[0])
 
         # assert(False)
@@ -144,7 +154,7 @@ class ColloidalSystem:
                 new_state[p_idx][1] = 2 * self.world_dims[1] - new_state[p_idx][1]
                 new_state[p_idx][4] = -new_state[p_idx][4]
 
-        # print(self.state[0])
+        # print(self.state[0][2], self.state[0][3:6], accel[0])
         # print(new_state[0])
         self.state = new_state
         self.time += dt

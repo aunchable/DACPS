@@ -70,7 +70,7 @@ class DQNAgent():
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
         self.num_episodes = 10000
-        self.num_time_steps = 200
+        self.num_time_steps = 2000
         self.reward_list = []
         self.final_result_per_episode = []
 
@@ -141,7 +141,7 @@ class DQNAgent():
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
             self.cs.random_initialization()
-            # self.cs.set_state( np.asarray([[0, 0, 0, 0, 0, 0]])    )
+            # self.cs.set_state( np.asarray([[400, 400, 0, 0, 0, 0]])    )
             # self.cs.set_state(np.asarray([[400, 400, 0, 0, 0, 0],[450, 400, 0, 0, 0, 0], [400, 450, 0, 0, 0, 0]]))
 
             state = self.cs.get_state()
@@ -155,17 +155,21 @@ class DQNAgent():
                 action = self.select_action(state)
                 self.steps_done += 1
                 light_mask = (( (((action.item() & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
+                # light_mask = [1]
 
                 # Add visualization
-                # if t % 10 == 0:
+                # if t % 1 == 0:
                 #     self.viz.update()
 
                 # Do action
                 for j in range(200):
                     self.cs.step(0.001, light_mask)
+                # assert(False)
+                # print(self.cs.state[0])
+
 
                 # Add visualization
-                # if t % 10 == 0:
+                # if t % 1 == 0:
                 #     time.sleep(0.1)
 
                 # Get reward
@@ -220,7 +224,7 @@ if __name__ == "__main__":
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 1100, 420],
+        ["jeb", 1000, 0.4],
         # ["shiet", 1200, 420],
         # ["goteem", 1300, 420]
     ]
