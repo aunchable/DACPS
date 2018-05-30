@@ -229,6 +229,7 @@ if __name__ == "__main__":
         # ["goteem", 1300, 420]
     ]
 
+    # type_counts = [1, 1, 1]
     type_counts = [1]
 
     lj_corr_matrix = [[(np.random.random(), np.random.random())]]
@@ -239,6 +240,7 @@ if __name__ == "__main__":
     #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
     # ]
 
+    # target_assembly = np.array([[0, 0], [0, 1], [1, 1]])
     target_assembly = np.array([[0, 0]])
 
     cs = ColloidalSystem(worldsize,
