@@ -39,9 +39,9 @@ class ReplayMemory(object):
 
 class DQN(nn.Module):
 
-    def __init__(self, num_actions, num_particles):
+    def __init__(self, num_actions, num_particles, state_size):
         super(DQN, self).__init__()
-        self.fc1 = nn.Linear(6*num_particles, 200)
+        self.fc1 = nn.Linear(int(state_size*num_particles), 200)
         self.fc2 = nn.Linear(200, 200)
         self.fc3 = nn.Linear(200, num_actions)
 
@@ -53,9 +53,15 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
+        self.simple_test_flag = 0
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
+        self.state_size = int(3)
         self.num_actions = int(2**(self.num_particles) )
+
+        if self.simple_test_flag:
+            self.num_actions = 4
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.BATCH_SIZE = 10
         self.GAMMA = 0.999
@@ -64,24 +70,18 @@ class DQNAgent():
         self.EPS_DECAY = 200
         self.TARGET_UPDATE = 10
         self.BUFFER_SIZE = 20
-        self.policy_net = DQN(self.num_actions, self.num_particles).to(self.device)
-        self.target_net = DQN(self.num_actions, self.num_particles).to(self.device)
+        self.policy_net = DQN(self.num_actions, self.num_particles, self.state_size).to(self.device)
+        self.target_net = DQN(self.num_actions, self.num_particles, self.state_size).to(self.device)
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
         self.num_episodes = 10000
-        self.num_time_steps = 2000
+        self.num_time_steps = 200
         self.reward_list = []
         self.final_result_per_episode = []
 
     # Epsilon-greedy action selection using policy_net
     def select_action(self, state):
-
-        # print("STATE")
-        # print(state)
-        #
-        # print("policy_net")
-        # print (self.policy_net(state))
 
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
@@ -89,8 +89,6 @@ class DQNAgent():
 
         if sample > eps_threshold:
             with torch.no_grad():
-                # print("Best Action")
-                # print(self.policy_net(state).max(1)[1].view(1, 1))
                 return self.policy_net(state).max(1)[1].view(1, 1)
         else:
             return torch.tensor([[random.randint(0, self.num_actions - 1)]], device = self.device, dtype = torch.long)
@@ -141,10 +139,8 @@ class DQNAgent():
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
             self.cs.random_initialization()
-            # self.cs.set_state( np.asarray([[400, 400, 0, 0, 0, 0]])    )
-            # self.cs.set_state(np.asarray([[400, 400, 0, 0, 0, 0],[450, 400, 0, 0, 0, 0], [400, 450, 0, 0, 0, 0]]))
 
-            state = self.cs.get_state()
+            state = self.cs.get_state()[:, :3]
             state = [item for sublist in state for item in sublist]
             state = torch.tensor([state], device=self.device, dtype = torch.float)
             r_old = self.cs.get_reward()
@@ -153,49 +149,53 @@ class DQNAgent():
 
                 # Select and perform an action
                 action = self.select_action(state)
+
                 self.steps_done += 1
                 light_mask = (( (((action.item() & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
-                # light_mask = [1]
 
                 # Add visualization
-                # if t % 1 == 0:
-                #     self.viz.update()
+                if t % 10 == 0:
+                    self.viz.update()
 
-                # Do action
-                for j in range(200):
-                    self.cs.step(0.001, light_mask)
-                # assert(False)
-                # print(self.cs.state[0])
+                if self.simple_test_flag:
+                    positions = self.cs.state[:, :2] # temporary
 
+                    if action.item() == 0:
+                        positions[0][0]+=8
+                    elif action.item() == 1:
+                        positions[0][0]-=8
+                    elif action.item() == 2:
+                        positions[0][1]+=8
+                    elif action.item() == 3:
+                        positions[0][1]-=8
+                    else:
+                        print("ERROR")
+                else:
+                    for j in range(200):
+                        self.cs.step(0.001, light_mask)
 
                 # Add visualization
-                # if t % 1 == 0:
-                #     time.sleep(0.1)
+                if t % 10 == 0:
+                    time.sleep(0.1)
 
                 # Get reward
                 r_new = self.cs.get_reward()
                 reward = torch.tensor([r_new - r_old], device=self.device, dtype = torch.float)
                 self.reward_list.append(r_new - r_old)
 
-                # if t % 10 == 0:
-                #     print("Reward: " + str(r_new - r_old))
-
                 # Observe new state
-                next_state = self.cs.get_state()
+                next_state = self.cs.get_state()[:, :3]
                 next_state = [item for sublist in next_state for item in sublist]
                 next_state = torch.tensor([next_state], device=self.device, dtype = torch.float)
 
                 # Compute TD Error
                 state_action_val = self.policy_net(state).gather(1, action)
+
                 max_target_val = self.target_net(next_state).max(1)[0].detach()
                 td_error = max_target_val*self.GAMMA + reward
 
-                # TODO: actually use td error for prioritized sampling from replay buffer
-
                 # Store the transition in memory
                 self.memory.push(state, action, next_state, reward)
-                # print("MEMORY")
-                # print(self.memory.position)
 
                 # Move to the next state
                 state = next_state
@@ -204,9 +204,6 @@ class DQNAgent():
                 self.optimize_model()
 
                 r_old = r_new
-
-            # Show reward at end of episode
-            # print("Reward: " + str(self.reward_list[-1]) )
 
             # Update the target network
             if i_episode % self.TARGET_UPDATE == 0:
@@ -224,23 +221,22 @@ if __name__ == "__main__":
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 1000, 0.4],
-        # ["shiet", 1200, 420],
-        # ["goteem", 1300, 420]
+        ["jeb", 1100, 420],
+        ["shiet", 1200, 420],
+        ["goteem", 1300, 420]
     ]
 
-    # type_counts = [1, 1, 1]
-    type_counts = [1]
+    # type_counts = [1]
+    type_counts = [1, 1, 1]
 
-    lj_corr_matrix = [[(np.random.random(), np.random.random())]]
+    # lj_corr_matrix = [[(np.random.random(), np.random.random())]]
 
-    # lj_corr_matrix = [
-    #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
-    #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
-    #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
-    # ]
+    lj_corr_matrix = [
+        [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
+        [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
+        [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
+    ]
 
-    # target_assembly = np.array([[0, 0], [0, 1], [1, 1]])
     target_assembly = np.array([[0, 0]])
 
     cs = ColloidalSystem(worldsize,
