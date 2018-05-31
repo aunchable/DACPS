@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import time
 import pickle
+import h5py
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -135,15 +136,23 @@ class DQNAgent():
         self.optimizer.step()
 
     def train_model(self):
+        f = h5py.File('./logging/logs' + str(LOGNUM) + '.txt', "w", libver='latest')
+        stats_grp = f.create_group("statistics")
+        dset_avgq = stats_grp.create_dataset("ep_qval", (self.num_episodes,), dtype='f')
+        dset_rewards = stats_grp.create_dataset("ep_reward", (self.num_episodes,), dtype='f')
+        f.swmr_mode = True # NECESSARY FOR SIMULTANEOUS READ/WRITE
+
         for i_episode in range(self.num_episodes):
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
             self.cs.random_initialization()
 
+
             state = self.cs.get_state()[:, :3]
             state = [item for sublist in state for item in sublist]
             state = torch.tensor([state], device=self.device, dtype = torch.float)
-            r_old = self.cs.get_reward()
+            r_init = self.cs.get_reward()
+            r_old = r_init
 
             for t in range(self.num_time_steps):
 
@@ -209,8 +218,25 @@ class DQNAgent():
             if i_episode % self.TARGET_UPDATE == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
-            self.final_result_per_episode.append( self.cs.get_reward()  )
-            print("Episode Reward: " + str(self.cs.get_reward()))
+            r_episode = self.cs.get_reward() - r_init
+            self.final_result_per_episode.append(r_episode)
+            print("Episode Reward: " + str(r_episode))
+
+            if len(self.memory) >= self.BATCH_SIZE:
+                transitions = self.memory.sample(self.BATCH_SIZE)
+                batch = Transition(*zip(*transitions))
+                state_batch = torch.cat(batch.state)
+                action_batch = torch.cat(batch.action)
+                reward_batch = torch.cat(batch.reward)
+                state_action_values = self.policy_net(state_batch).gather(1, action_batch)
+                dset_avgq[i] = state_action_values.mean()
+            else:
+                dset_avgq[i] = 0.0
+
+            dset_rewards[i] = r_episode
+
+            dset_avgq.flush()
+            dset_rewards.flush()
 
         pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
 
