@@ -24,7 +24,7 @@ lj_corr_matrix = [
 ]
 
 #TODO: not do this
-target_assembly = None
+target_assembly = [[0, 0], [0, 1], [1, 0]]
 
 cs = ColloidalSystem(worldsize,
                      type_infos,
