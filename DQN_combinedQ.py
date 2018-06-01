@@ -336,7 +336,7 @@ class DQNAgent():
                     for sample in transitions:
                         curr_state = sample.state.numpy()[0]
                         state_diff = curr_state[:2] - self.cs.target_assembly[0]
-                        orientation_away = np.angle(complex(state_diff))
+                        orientation_away = np.angle(complex(state_diff[0], state_diff[1]))
                         if orientation_away < 0.0:
                             orientation_away += 2 * np.pi
                         orientation_towards = orientation_away - np.pi
