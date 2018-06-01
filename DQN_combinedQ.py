@@ -25,7 +25,8 @@ def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
 
 def convert_to_int(encoded):
-    return sum(encoded[0]*np.array([2**i for i in range(len(encoded))]) )
+    encoded = encoded[0].numpy()
+    return sum(encoded*np.array([2**i for i in range(len(encoded))]) )
 
 class ReplayMemory(object):
 
@@ -66,7 +67,7 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
-        self.simple_test_flag = 0
+        self.simple_test_flag = 1
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.state_size = int(3)
@@ -91,7 +92,7 @@ class DQNAgent():
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
-        self.num_episodes = 100000
+        self.num_episodes = 5
         self.num_time_steps = 250
         self.reward_list = []
         self.final_result_per_episode = []
@@ -283,7 +284,9 @@ class DQNAgent():
                     good_actions = []
                     bad_actions = []
                     for sample in transitions:
-                        state_diff = sample.state - self.target_assembly
+                        print("SHIET")
+                        print(sample.state.numpy())
+                        state_diff = sample.state.numpy()[0][:, :2] - self.cs.target_assembly[0]
                         good_action = [0,0,0,0,0]
                         bad_action = [0,0,0,0,0]
                         if state_diff[0] == 0.0 and state_diff[1] == 0.0:
@@ -334,7 +337,7 @@ if __name__ == "__main__":
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 1000, 0.5],
+        ["jeb", 1000, 10],
         # ["shiet", 1200, 420],
         # ["goteem", 1300, 420]
     ]
