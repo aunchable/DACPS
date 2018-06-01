@@ -25,8 +25,8 @@ def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
 
 def convert_to_int(encoded):
-    encoded = encoded.numpy()[0]
-    return sum(encoded*np.array([2**i for i in range(len(encoded))]) )
+    encoded = encoded[0]
+    return sum([encoded[i] * 2**i for i in range(len(encoded))])
 
 class ReplayMemory(object):
 
@@ -68,7 +68,7 @@ class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
         self.simple_test_flag = 0
-        self.viz = Visualizer(self.cs)
+#        self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.state_size = int(3)
         self.action_size = cs.num_particles
@@ -273,7 +273,7 @@ class DQNAgent():
                 action_batch = torch.cat(batch.action)
                 reward_batch = torch.cat(batch.reward)
                 state_action_values = self.policy_net(state_batch, action_batch)
-                dset_avgq[i_episode] = state_action_values.detach().numpy().mean()
+                dset_avgq[i_episode] = state_action_values.detach().cpu().numpy().mean()
             else:
                 dset_avgq[i_episode] = 0.0
 
