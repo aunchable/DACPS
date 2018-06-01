@@ -65,7 +65,7 @@ class ColloidalSystem:
                 eps, sig = self.lj_corr_matrix[self.particle_types[p1_idx]][self.particle_types[p2_idx]]
                 dxyz = self.state[p1_idx, :2] - self.state[p2_idx, :2]
                 dr = np.sqrt(np.dot(dxyz, dxyz))
-                minusdUrdr = - 48 * eps * (np.power(sig / dr, 12) - np.power(sig / dr, 6)) / dr
+                minusdUrdr = - 4 * eps * (12 * np.power(sig / dr, 12) - 6 * np.power(sig / dr, 6)) / dr
                 force = minusdUrdr * dxyz
                 accel[p1_idx][:2] += (force / self.type_mass[self.particle_types[p1_idx]])
                 accel[p2_idx][:2] -= (force / self.type_mass[self.particle_types[p2_idx]])
