@@ -217,5 +217,5 @@ class ColloidalSystem:
         #
         # transform = np.array(la.orthogonal_procrustes(centered_positions, centered_target_positions)[0])
         # distance = np.linalg.norm(transform - np.identity(2))
-        distance = -sum( (positions[0] - target_positions[0])**2 )
+        distance = -np.abs(sum(positions[0] - target_positions[0] ))
         return distance
