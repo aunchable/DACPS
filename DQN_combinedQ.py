@@ -284,9 +284,7 @@ class DQNAgent():
                     good_actions = []
                     bad_actions = []
                     for sample in transitions:
-                        print("SHIET")
-                        print(sample.state.numpy())
-                        state_diff = sample.state.numpy()[0][:, :2] - self.cs.target_assembly[0]
+                        state_diff = sample.state.numpy()[0][:2] - self.cs.target_assembly[0]
                         good_action = [0,0,0,0,0]
                         bad_action = [0,0,0,0,0]
                         if state_diff[0] == 0.0 and state_diff[1] == 0.0:
@@ -307,8 +305,8 @@ class DQNAgent():
                                 else:
                                     good_action = [0,1,0,0,0]
                                     bad_action = [1,1,0,0,0]
-                        good_action_tensor = torch.tensor(good_action, device = self.device, dtype = torch.float)
-                        bad_action_tensor = torch.tensor(bad_action, device = self.device, dtype = torch.float)
+                        good_action_tensor = torch.tensor([good_action], device = self.device, dtype = torch.float)
+                        bad_action_tensor = torch.tensor([bad_action], device = self.device, dtype = torch.float)
                         good_actions.append(good_action_tensor)
                         bad_actions.append(bad_action_tensor)
 
