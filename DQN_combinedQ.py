@@ -14,6 +14,9 @@ import torch.nn.functional as F
 import time
 import pickle
 from torch.autograd import Variable
+import h5py
+
+LOGNUM = 0
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -79,6 +82,7 @@ class DQNAgent():
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.BATCH_SIZE = 10
+        self.STATS_BATCH_SIZE = 100
         self.GAMMA = 0.999
         self.EPS_START = 0.9
         self.EPS_END = 0.01
@@ -177,6 +181,17 @@ class DQNAgent():
         self.optimizer.step()
 
     def train_model(self):
+        f = h5py.File('./logging/logs' + str(LOGNUM) + '.txt', "w", libver='latest')
+        stats_grp = f.create_group("statistics")
+        dset_q = stats_grp.create_dataset("ep_q", (self.num_episodes, self.STATS_BATCH_SIZE), dtype='f')
+        dset_rewards = stats_grp.create_dataset("ep_reward", (self.num_episodes,), dtype='f')
+        if self.simple_test_flag:
+            dset_goodq = stats_grp.create_dataset("ep_goodq", (self.num_episodes,), dtype='f')
+            dset_badq = stats_grp.create_dataset("ep_badq", (self.num_episodes,), dtype='f')
+
+
+        f.swmr_mode = True # NECESSARY FOR SIMULTANEOUS READ/WRITE
+
         for i_episode in range(self.num_episodes):
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
@@ -188,7 +203,8 @@ class DQNAgent():
             state = self.cs.get_state()[:, :3]
             state = [item for sublist in state for item in sublist]
             state = torch.tensor([state], device=self.device, dtype = torch.float)
-            r_old = self.cs.get_reward()
+            r_init = self.cs.get_reward()
+            r_old = r_init
 
             for t in range(self.num_time_steps):
 
@@ -253,8 +269,63 @@ class DQNAgent():
             if i_episode % self.TARGET_UPDATE == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
-            self.final_result_per_episode.append( self.cs.get_reward()  )
-            print("Episode Reward: " + str(self.cs.get_reward()))
+            r_episode = self.cs.get_reward() - r_init
+            self.final_result_per_episode.append(r_episode)
+            print("Episode Reward: " + str(r_episode))
+
+            if len(self.memory) >= self.STATS_BATCH_SIZE:
+                batch = Transition(*zip(*transitions))
+                state_batch = torch.cat(batch.state)
+                action_batch = torch.cat(batch.action)
+                reward_batch = torch.cat(batch.reward)
+                state_action_values = self.policy_net(state_batch, action_batch)
+                dset_q[i] = state_action_values
+
+                if self.simple_test_flag:
+                    good_actions = []
+                    bad_actions = []
+                    for sample in transitions:
+                        state_diff = sample.state - self.target_assembly
+                        good_action = [0,0,0,0]
+                        bad_action = [0,0,0,0]
+                        if state_diff[0] == 0.0 and state_diff[1] == 0.0:
+                            good_action = [0,0,0,1]
+                            bad_action = [0,0,0,0]
+                        else:
+                            if np.absolute(state_diff[0]) >= np.absolute(state_diff[1]):
+                                if state_diff[0] > 0.0:
+                                    good_action = [1,0,0,0]
+                                    bad_action = [0,0,0,0]
+                                else:
+                                    good_action = [0,0,0,0]
+                                    bad_action = [1,0,0,0]
+                            else:
+                                if state_diff[1] > 0.0:
+                                    good_action = [0,0,1,0]
+                                    bad_action = [0,1,0,0]
+                                else:
+                                    good_action = [0,1,0,0]
+                                    bad_action = [0,0,1,0]
+                        good_action_tensor = torch.tensor(good_action, device = self.device, dtype = torch.float)
+                        bad_action_tensor = torch.tensor(bad_action, device = self.device, dtype = torch.float)
+                        good_actions.append(good_action_tensor)
+                        bad_actions.append(bad_action_tensor)
+
+                    good_action_batch = torch.cat(good_actions)
+                    state_good_action_values = self.policy_net(state_batch, good_action_batch)
+                    dset_goodq[i] = state_good_action_values.mean()
+
+                    bad_action_batch = torch.cat(bad_actions)
+                    state_bad_action_values = self.policy_net(state_batch, bad_action_batch)
+                    dset_badq[i] = state_bad_action_values.mean()
+
+            else:
+                dset_q[i] = 0.0
+
+            dset_rewards[i] = r_episode
+
+            dset_q.flush()
+            dset_rewards.flush()
 
         pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
 
