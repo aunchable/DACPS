@@ -19,7 +19,7 @@ import h5py
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-LOGNUMBER = 1
+LOGNUMBER = 2
 
 def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
@@ -188,10 +188,10 @@ class DQNAgent():
         for i_episode in range(self.num_episodes):
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
-            self.cs.random_initialization()
-            # self.cs.set_state(np.array([
-            #     [400, 400, 0, 0, 0, 0],
-            # ]))
+            # self.cs.random_initialization()
+            self.cs.set_state(np.array([
+                [4000, 4000, 0, 0, 0, 0],
+            ]))
 
             state = self.cs.get_state()[:, :3]
             state = [item for sublist in state for item in sublist]
@@ -210,9 +210,9 @@ class DQNAgent():
                 self.steps_done += 1
                 light_mask = (( (((int(int_action) & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
 
-                # Add visualization
-                # if t % 10 == 0:
-                #     self.viz.update()
+                # # Add visualization
+                if t % 10 == 0:
+                    self.viz.update()
 
                 if self.simple_test_flag:
                     positions = self.cs.state[:, :2] # temporary
@@ -231,11 +231,12 @@ class DQNAgent():
                         positions[0][1]-=8
                 else:
                     for j in range(200):
+                        # self.cs.step(0.001, [0])
                         self.cs.step(0.001, light_mask)
 
-                # Add visualization
+                # # # Add visualization
                 # if t % 10 == 0:
-                #     time.sleep(0.1)
+                #     print(self.cs.get_state()[:,5])
 
                 # Get reward
                 r_new = self.cs.get_reward()
@@ -264,7 +265,7 @@ class DQNAgent():
 
             r_episode = self.cs.get_reward() - r_init
             self.final_result_per_episode.append(r_episode)
-            print("Episode Reward: " + str(r_episode))
+            print("Episode Reward: " + str(r_episode), "loss: ", self.cs.get_reward())
 
             if len(self.memory) >= self.BATCH_SIZE:
                 transitions = self.memory.sample(self.BATCH_SIZE)
@@ -291,7 +292,7 @@ if __name__ == "__main__":
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 1000, 0.5],
+        ["jeb", 1000, 10],
         # ["shiet", 1200, 420],
         # ["goteem", 1300, 420]
     ]
