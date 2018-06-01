@@ -186,6 +186,11 @@ class DQNAgent():
         if self.simple_test_flag:
             dset_goodq = stats_grp.create_dataset("ep_goodq", (self.num_episodes,), dtype='f')
             dset_badq = stats_grp.create_dataset("ep_badq", (self.num_episodes,), dtype='f')
+        elif self.num_particles == 1:
+            dset_goodq = stats_grp.create_dataset("ep_goodq", (self.num_episodes,), dtype='f')
+            dset_midq1 = stats_grp.create_dataset("ep_midq1", (self.num_episodes,), dtype='f')
+            dset_midq2 = stats_grp.create_dataset("ep_midq2", (self.num_episodes,), dtype='f')
+            dset_badq = stats_grp.create_dataset("ep_badq", (self.num_episodes,), dtype='f')
 
 
         f.swmr_mode = True # NECESSARY FOR SIMULTANEOUS READ/WRITE
@@ -317,6 +322,64 @@ class DQNAgent():
                     bad_action_batch = torch.cat(bad_actions)
                     state_bad_action_values = self.policy_net(state_batch, bad_action_batch)
                     dset_badq[i_episode] = state_bad_action_values.detach().numpy().mean()
+
+                    dset_goodq.flush()
+                    dset_badq.flush()
+
+                elif self.num_particles == 1:
+
+                    new_states_away = []
+                    new_states_towards = []
+                    pulse_action = []
+                    nopulse_action = []
+
+                    for sample in transitions:
+                        curr_state = sample.state.numpy()[0]
+                        state_diff = curr_state[:2] - self.cs.target_assembly[0]
+                        orientation_away = np.angle(complex(state_diff))
+                        if orientation_away < 0.0:
+                            orientation_away += 2 * np.pi
+                        orientation_towards = orientation_away - np.pi
+                        if orientation_towards < 0.0:
+                            orientation_towards += 2 * np.pi
+
+                        state_away = curr_state.copy()
+                        state_away[2] = orientation_away
+
+                        state_towards = curr_state.copy()
+                        state_towards[2] = orientation_towards
+
+                        new_states_away.append(torch.tensor([state_away], device = self.device, dtype = torch.float))
+                        new_states_towards.append(torch.tensor([state_towards], device = self.device, dtype = torch.float))
+
+                        pulse_action.append(torch.tensor([[1]], device = self.device, dtype = torch.float))
+                        nopulse_action.append(torch.tensor([[0]], device = self.device, dtype = torch.float))
+
+                    new_states_away_batch = torch.cat(new_states_away)
+                    new_states_towards_batch = torch.cat(new_states_towards)
+                    pulse_action_batch = torch.cat(pulse_action)
+                    nopulse_action_batch = torch.cat(nopulse_action)
+
+                    # good = oriented towards and pulse
+                    goodq_action_values = self.policy_net(new_states_towards_batch, pulse_action_batch)
+                    dset_goodq[i_episode] = goodq_action_values.detach().numpy().mean()
+
+                    # mid = oriented towards and no pulse
+                    midq1_action_values = self.policy_net(new_states_towards_batch, nopulse_action_batch)
+                    dset_midq1[i_episode] = midq1_action_values.detach().numpy().mean()
+
+                    # bad = oriented away and pulse
+                    badq_action_values = self.policy_net(new_states_away_batch, pulse_action_batch)
+                    dset_badq[i_episode] = badq_action_values.detach().numpy().mean()
+
+                    # mid = oriented towards and no pulse
+                    midq2_action_values = self.policy_net(new_states_away_batch, nopulse_action_batch)
+                    dset_midq2[i_episode] = midq2_action_values.detach().numpy().mean()
+
+                    dset_goodq.flush()
+                    dset_badq.flush()
+                    dset_midq1.flush()
+                    dset_midq2.flush()
 
             else:
                 dset_q[i_episode] = 0.0
