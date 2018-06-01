@@ -285,26 +285,26 @@ class DQNAgent():
                     bad_actions = []
                     for sample in transitions:
                         state_diff = sample.state - self.target_assembly
-                        good_action = [0,0,0,0]
-                        bad_action = [0,0,0,0]
+                        good_action = [0,0,0,0,0]
+                        bad_action = [0,0,0,0,0]
                         if state_diff[0] == 0.0 and state_diff[1] == 0.0:
-                            good_action = [0,0,0,1]
-                            bad_action = [0,0,0,0]
+                            good_action = [0,0,1,0,0]
+                            bad_action = [0,0,0,0,0]
                         else:
                             if np.absolute(state_diff[0]) >= np.absolute(state_diff[1]):
                                 if state_diff[0] > 0.0:
-                                    good_action = [1,0,0,0]
-                                    bad_action = [0,0,0,0]
+                                    good_action = [1,0,0,0,0]
+                                    bad_action = [0,0,0,0,0]
                                 else:
-                                    good_action = [0,0,0,0]
-                                    bad_action = [1,0,0,0]
+                                    good_action = [0,0,0,0,0]
+                                    bad_action = [1,0,0,0,0]
                             else:
                                 if state_diff[1] > 0.0:
-                                    good_action = [0,0,1,0]
-                                    bad_action = [0,1,0,0]
+                                    good_action = [1,1,0,0,0]
+                                    bad_action = [0,1,0,0,0]
                                 else:
-                                    good_action = [0,1,0,0]
-                                    bad_action = [0,0,1,0]
+                                    good_action = [0,1,0,0,0]
+                                    bad_action = [1,1,0,0,0]
                         good_action_tensor = torch.tensor(good_action, device = self.device, dtype = torch.float)
                         bad_action_tensor = torch.tensor(bad_action, device = self.device, dtype = torch.float)
                         good_actions.append(good_action_tensor)
