@@ -25,8 +25,7 @@ def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
 
 def convert_to_int(encoded):
-    encoded = encoded.numpy()[0]
-    return sum(encoded*np.array([2**i for i in range(len(encoded))]) )
+    return sum(encoded[0]*np.array([2**i for i in range(len(encoded))]) )
 
 class ReplayMemory(object):
 
