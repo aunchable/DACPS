@@ -79,8 +79,8 @@ class DQNAgent():
             self.action_size = 5
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.BATCH_SIZE = 10
-        self.STATS_BATCH_SIZE = 100
+        self.BATCH_SIZE = 256
+        self.STATS_BATCH_SIZE = 1024
         self.GAMMA = 0.999
         self.EPS_START = 1
         self.EPS_END = 0.1
@@ -278,7 +278,7 @@ class DQNAgent():
                 action_batch = torch.cat(batch.action)
                 reward_batch = torch.cat(batch.reward)
                 state_action_values = self.policy_net(state_batch, action_batch)
-                dset_q[i] = state_action_values
+                dset_q[i_episode] = state_action_values.detach().numpy().mean()
 
                 if self.simple_test_flag:
                     good_actions = []
@@ -312,16 +312,16 @@ class DQNAgent():
 
                     good_action_batch = torch.cat(good_actions)
                     state_good_action_values = self.policy_net(state_batch, good_action_batch)
-                    dset_goodq[i] = state_good_action_values.mean()
+                    dset_goodq[i_episode] = state_good_action_values.detach().numpy().mean()
 
                     bad_action_batch = torch.cat(bad_actions)
                     state_bad_action_values = self.policy_net(state_batch, bad_action_batch)
-                    dset_badq[i] = state_bad_action_values.mean()
+                    dset_badq[i_episode] = state_bad_action_values.detach().numpy().mean()
 
             else:
-                dset_q[i] = 0.0
+                dset_q[i_episode] = 0.0
 
-            dset_rewards[i] = r_episode
+            dset_rewards[i_episode] = r_episode
 
             dset_q.flush()
             dset_rewards.flush()
