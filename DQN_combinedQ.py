@@ -14,18 +14,19 @@ import torch.nn.functional as F
 import time
 import pickle
 from torch.autograd import Variable
+import h5py
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
+LOGNUMBER = 1
+
 def one_hot_encode(i, n):
-    temp = np.zeros(n)
-    temp[i] = 1
-    return temp
+    return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
 
 def convert_to_int(encoded):
     encoded = encoded.numpy()[0]
-    return sum(encoded*np.arange(len(encoded)) )
+    return sum(encoded*np.array([2**i for i in range(len(encoded))]) )
 
 class ReplayMemory(object):
 
@@ -52,8 +53,8 @@ class DQN(nn.Module):
     def __init__(self, num_actions, num_particles, state_size, action_size):
         super(DQN, self).__init__()
         self.fc1 = nn.Linear(int(state_size*num_particles + action_size), 50)
-        self.fc2 = nn.Linear(50, 50)
-        self.fc3 = nn.Linear(50, 1)
+        self.fc2 = nn.Linear(50, 20)
+        self.fc3 = nn.Linear(20, 1)
 
     def forward(self, state, action):
         x = torch.cat((state, action), 1)
@@ -66,7 +67,7 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
-        self.simple_test_flag = 1
+        self.simple_test_flag = 0
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.state_size = int(3)
@@ -78,20 +79,21 @@ class DQNAgent():
             self.action_size = 5
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.BATCH_SIZE = 10
+        print(self.device)
+        self.BATCH_SIZE = 256
         self.GAMMA = 0.999
-        self.EPS_START = 0.9
-        self.EPS_END = 0.01
-        self.EPS_DECAY = 2000
+        self.EPS_START = 1
+        self.EPS_END = 0.1
+        self.EPS_DECAY = 500
         self.TARGET_UPDATE = 10
-        self.BUFFER_SIZE = 20
+        self.BUFFER_SIZE = 10000
         self.policy_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.device)
         self.target_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.device)
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
-        self.num_episodes = 10000
-        self.num_time_steps = 100
+        self.num_episodes = 100000
+        self.num_time_steps = 250
         self.reward_list = []
         self.final_result_per_episode = []
 
@@ -173,10 +175,16 @@ class DQNAgent():
         self.optimizer.zero_grad()
         loss.backward()
         for param in self.policy_net.parameters():
-            param.grad.data.clamp_(-1, 1)
+            param.grad.data.clamp_(-10000, 10000)
         self.optimizer.step()
 
     def train_model(self):
+        f = h5py.File('./logging/logs' + str(LOGNUMBER) + '.txt', "w", libver='latest')
+        stats_grp = f.create_group("statistics")
+        dset_avgq = stats_grp.create_dataset("ep_avgq", (self.num_episodes,), dtype='f')
+        dset_rewards = stats_grp.create_dataset("ep_reward", (self.num_episodes,), dtype='f')
+        f.swmr_mode = True # NECESSARY FOR SIMULTANEOUS READ/WRITE
+
         for i_episode in range(self.num_episodes):
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
@@ -188,7 +196,8 @@ class DQNAgent():
             state = self.cs.get_state()[:, :3]
             state = [item for sublist in state for item in sublist]
             state = torch.tensor([state], device=self.device, dtype = torch.float)
-            r_old = self.cs.get_reward()
+            r_init = self.cs.get_reward()
+            r_old = r_init
 
             for t in range(self.num_time_steps):
 
@@ -202,8 +211,8 @@ class DQNAgent():
                 light_mask = (( (((int(int_action) & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
 
                 # Add visualization
-                if t % 10 == 0:
-                    self.viz.update()
+                # if t % 10 == 0:
+                #     self.viz.update()
 
                 if self.simple_test_flag:
                     positions = self.cs.state[:, :2] # temporary
@@ -225,8 +234,8 @@ class DQNAgent():
                         self.cs.step(0.001, light_mask)
 
                 # Add visualization
-                if t % 10 == 0:
-                    time.sleep(0.1)
+                # if t % 10 == 0:
+                #     time.sleep(0.1)
 
                 # Get reward
                 r_new = self.cs.get_reward()
@@ -253,19 +262,36 @@ class DQNAgent():
             if i_episode % self.TARGET_UPDATE == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
-            self.final_result_per_episode.append( self.cs.get_reward()  )
-            print("Episode Reward: " + str(self.cs.get_reward()))
+            r_episode = self.cs.get_reward() - r_init
+            self.final_result_per_episode.append(r_episode)
+            print("Episode Reward: " + str(r_episode))
+
+            if len(self.memory) >= self.BATCH_SIZE:
+                transitions = self.memory.sample(self.BATCH_SIZE)
+                batch = Transition(*zip(*transitions))
+                state_batch = torch.cat(batch.state)
+                action_batch = torch.cat(batch.action)
+                reward_batch = torch.cat(batch.reward)
+                state_action_values = self.policy_net(state_batch, action_batch)
+                dset_avgq[i_episode] = state_action_values.detach().numpy().mean()
+            else:
+                dset_avgq[i_episode] = 0.0
+
+            dset_rewards[i_episode] = r_episode
+
+            dset_avgq.flush()
+            dset_rewards.flush()
 
         pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
 
         # print('Complete')
 
 if __name__ == "__main__":
-    worldsize = [800, 800]
+    worldsize = [8000, 8000]
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 1100, 420],
+        ["jeb", 1000, 0.5],
         # ["shiet", 1200, 420],
         # ["goteem", 1300, 420]
     ]
@@ -281,7 +307,7 @@ if __name__ == "__main__":
     #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
     # ]
 
-    target_assembly = np.array([[400, 400]])
+    target_assembly = np.array([[4000, 4000]])
 
     cs = ColloidalSystem(worldsize,
                          type_infos,
