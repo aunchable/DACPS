@@ -19,7 +19,7 @@ import h5py
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-LOGNUMBER = 2
+LOGNUMBER = 3
 
 def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
@@ -67,7 +67,7 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
-        self.simple_test_flag = 1
+        self.simple_test_flag = 0
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.state_size = int(3)
@@ -85,14 +85,14 @@ class DQNAgent():
         self.EPS_START = 1
         self.EPS_END = 0.1
         self.EPS_DECAY = 500
-        self.TARGET_UPDATE = 10
+        self.TARGET_UPDATE = 20
         self.BUFFER_SIZE = 10000
         self.policy_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.device)
         self.target_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.device)
-        self.optimizer = optim.RMSprop(self.policy_net.parameters())
+        self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=0.001)
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
-        self.num_episodes = 5
+        self.num_episodes = 50000
         self.num_time_steps = 250
         self.reward_list = []
         self.final_result_per_episode = []
@@ -240,8 +240,8 @@ class DQNAgent():
                         # print("UP")
                         positions[0][1]-=8
                 else:
-                    for j in range(200):
-                        # self.cs.step(0.001, [0])
+                    for j in range(400):
+                        # self.cs.step(0.001, [i_episode%2])
                         self.cs.step(0.001, light_mask)
 
                 # # # Add visualization
@@ -399,7 +399,7 @@ if __name__ == "__main__":
 
     type_infos = [
         # id, radius, propensity
-        ["jeb", 1000, 10],
+        ["jeb", 1000, 5],
         # ["shiet", 1200, 420],
         # ["goteem", 1300, 420]
     ]
