@@ -25,7 +25,7 @@ def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
 
 def convert_to_int(encoded):
-    encoded = encoded.numpy()[0]
+    encoded = encoded[0].numpy()
     return sum(encoded*np.array([2**i for i in range(len(encoded))]) )
 
 class ReplayMemory(object):
@@ -67,7 +67,7 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
-        self.simple_test_flag = 0
+        self.simple_test_flag = 1
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.state_size = int(3)
@@ -79,8 +79,8 @@ class DQNAgent():
             self.action_size = 5
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(self.device)
         self.BATCH_SIZE = 256
+        self.STATS_BATCH_SIZE = 1024
         self.GAMMA = 0.999
         self.EPS_START = 1
         self.EPS_END = 0.1
@@ -92,7 +92,7 @@ class DQNAgent():
         self.optimizer = optim.RMSprop(self.policy_net.parameters())
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
-        self.num_episodes = 100000
+        self.num_episodes = 5
         self.num_time_steps = 250
         self.reward_list = []
         self.final_result_per_episode = []
@@ -181,8 +181,18 @@ class DQNAgent():
     def train_model(self):
         f = h5py.File('./logging/logs' + str(LOGNUMBER) + '.txt', "w", libver='latest')
         stats_grp = f.create_group("statistics")
-        dset_avgq = stats_grp.create_dataset("ep_avgq", (self.num_episodes,), dtype='f')
+        dset_q = stats_grp.create_dataset("ep_q", (self.num_episodes, self.STATS_BATCH_SIZE), dtype='f')
         dset_rewards = stats_grp.create_dataset("ep_reward", (self.num_episodes,), dtype='f')
+        if self.simple_test_flag:
+            dset_goodq = stats_grp.create_dataset("ep_goodq", (self.num_episodes,), dtype='f')
+            dset_badq = stats_grp.create_dataset("ep_badq", (self.num_episodes,), dtype='f')
+        elif self.num_particles == 1:
+            dset_goodq = stats_grp.create_dataset("ep_goodq", (self.num_episodes,), dtype='f')
+            dset_midq1 = stats_grp.create_dataset("ep_midq1", (self.num_episodes,), dtype='f')
+            dset_midq2 = stats_grp.create_dataset("ep_midq2", (self.num_episodes,), dtype='f')
+            dset_badq = stats_grp.create_dataset("ep_badq", (self.num_episodes,), dtype='f')
+
+
         f.swmr_mode = True # NECESSARY FOR SIMULTANEOUS READ/WRITE
 
         for i_episode in range(self.num_episodes):
@@ -267,20 +277,117 @@ class DQNAgent():
             self.final_result_per_episode.append(r_episode)
             print("Episode Reward: " + str(r_episode), "loss: ", self.cs.get_reward())
 
-            if len(self.memory) >= self.BATCH_SIZE:
-                transitions = self.memory.sample(self.BATCH_SIZE)
+            if len(self.memory) >= self.STATS_BATCH_SIZE:
+                transitions = self.memory.sample(self.STATS_BATCH_SIZE)
                 batch = Transition(*zip(*transitions))
                 state_batch = torch.cat(batch.state)
                 action_batch = torch.cat(batch.action)
                 reward_batch = torch.cat(batch.reward)
                 state_action_values = self.policy_net(state_batch, action_batch)
-                dset_avgq[i_episode] = state_action_values.detach().numpy().mean()
+                dset_q[i_episode] = state_action_values.detach().numpy().mean()
+
+                if self.simple_test_flag:
+                    good_actions = []
+                    bad_actions = []
+                    for sample in transitions:
+                        state_diff = sample.state.numpy()[0][:2] - self.cs.target_assembly[0]
+                        good_action = [0,0,0,0,0]
+                        bad_action = [0,0,0,0,0]
+                        if state_diff[0] == 0.0 and state_diff[1] == 0.0:
+                            good_action = [0,0,1,0,0]
+                            bad_action = [0,0,0,0,0]
+                        else:
+                            if np.absolute(state_diff[0]) >= np.absolute(state_diff[1]):
+                                if state_diff[0] > 0.0:
+                                    good_action = [1,0,0,0,0]
+                                    bad_action = [0,0,0,0,0]
+                                else:
+                                    good_action = [0,0,0,0,0]
+                                    bad_action = [1,0,0,0,0]
+                            else:
+                                if state_diff[1] > 0.0:
+                                    good_action = [1,1,0,0,0]
+                                    bad_action = [0,1,0,0,0]
+                                else:
+                                    good_action = [0,1,0,0,0]
+                                    bad_action = [1,1,0,0,0]
+                        good_action_tensor = torch.tensor([good_action], device = self.device, dtype = torch.float)
+                        bad_action_tensor = torch.tensor([bad_action], device = self.device, dtype = torch.float)
+                        good_actions.append(good_action_tensor)
+                        bad_actions.append(bad_action_tensor)
+
+                    good_action_batch = torch.cat(good_actions)
+                    state_good_action_values = self.policy_net(state_batch, good_action_batch)
+                    dset_goodq[i_episode] = state_good_action_values.detach().numpy().mean()
+
+                    bad_action_batch = torch.cat(bad_actions)
+                    state_bad_action_values = self.policy_net(state_batch, bad_action_batch)
+                    dset_badq[i_episode] = state_bad_action_values.detach().numpy().mean()
+
+                    dset_goodq.flush()
+                    dset_badq.flush()
+
+                elif self.num_particles == 1:
+
+                    new_states_away = []
+                    new_states_towards = []
+                    pulse_action = []
+                    nopulse_action = []
+
+                    for sample in transitions:
+                        curr_state = sample.state.numpy()[0]
+                        state_diff = curr_state[:2] - self.cs.target_assembly[0]
+                        orientation_away = np.angle(complex(state_diff[0], state_diff[1]))
+                        if orientation_away < 0.0:
+                            orientation_away += 2 * np.pi
+                        orientation_towards = orientation_away - np.pi
+                        if orientation_towards < 0.0:
+                            orientation_towards += 2 * np.pi
+
+                        state_away = curr_state.copy()
+                        state_away[2] = orientation_away
+
+                        state_towards = curr_state.copy()
+                        state_towards[2] = orientation_towards
+
+                        new_states_away.append(torch.tensor([state_away], device = self.device, dtype = torch.float))
+                        new_states_towards.append(torch.tensor([state_towards], device = self.device, dtype = torch.float))
+
+                        pulse_action.append(torch.tensor([[1]], device = self.device, dtype = torch.float))
+                        nopulse_action.append(torch.tensor([[0]], device = self.device, dtype = torch.float))
+
+                    new_states_away_batch = torch.cat(new_states_away)
+                    new_states_towards_batch = torch.cat(new_states_towards)
+                    pulse_action_batch = torch.cat(pulse_action)
+                    nopulse_action_batch = torch.cat(nopulse_action)
+
+                    # good = oriented towards and pulse
+                    goodq_action_values = self.policy_net(new_states_towards_batch, pulse_action_batch)
+                    dset_goodq[i_episode] = goodq_action_values.detach().numpy().mean()
+
+                    # mid = oriented towards and no pulse
+                    midq1_action_values = self.policy_net(new_states_towards_batch, nopulse_action_batch)
+                    dset_midq1[i_episode] = midq1_action_values.detach().numpy().mean()
+
+                    # bad = oriented away and pulse
+                    badq_action_values = self.policy_net(new_states_away_batch, pulse_action_batch)
+                    dset_badq[i_episode] = badq_action_values.detach().numpy().mean()
+
+                    # mid = oriented towards and no pulse
+                    midq2_action_values = self.policy_net(new_states_away_batch, nopulse_action_batch)
+                    dset_midq2[i_episode] = midq2_action_values.detach().numpy().mean()
+
+                    dset_goodq.flush()
+                    dset_badq.flush()
+                    dset_midq1.flush()
+                    dset_midq2.flush()
+
             else:
-                dset_avgq[i_episode] = 0.0
+                dset_q[i_episode] = 0.0
 
             dset_rewards[i_episode] = r_episode
 
-            dset_avgq.flush()
+            dset_q.flush()
             dset_rewards.flush()
 
         pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
