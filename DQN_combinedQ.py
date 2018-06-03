@@ -19,7 +19,7 @@ import h5py
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-LOGNUMBER = 3
+LOGNUMBER = 4
 
 def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
@@ -70,7 +70,7 @@ class DQNAgent():
         self.simple_test_flag = 0
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
-        self.state_size = int(3)
+        self.state_size = int(6)
         self.action_size = cs.num_particles
         self.num_actions = int(2**(self.num_particles) )
 
@@ -203,7 +203,8 @@ class DQNAgent():
                 [4000, 4000, 0, 0, 0, 0],
             ]))
 
-            state = self.cs.get_state()[:, :3]
+            # state = self.cs.get_state()[:, :3]
+            state = self.cs.get_state()
             state = [item for sublist in state for item in sublist]
             state = torch.tensor([state], device=self.device, dtype = torch.float)
             r_init = self.cs.get_reward()
@@ -254,7 +255,8 @@ class DQNAgent():
                 self.reward_list.append(r_new - r_old)
 
                 # Observe new state
-                next_state = self.cs.get_state()[:, :3]
+                # next_state = self.cs.get_state()[:, :3]
+                next_state = self.cs.get_state()
                 next_state = [item for sublist in next_state for item in sublist]
                 next_state = torch.tensor([next_state], device=self.device, dtype = torch.float)
 
