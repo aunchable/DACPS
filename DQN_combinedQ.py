@@ -112,6 +112,8 @@ class DQNAgent():
         self.reward_list = []
         self.final_result_per_episode = []
 
+        self.total_time = [0, 0, 0, 0, 0, 0]
+
     # Epsilon-greedy action selection using policy_net
     def select_action(self, state):
 
@@ -164,7 +166,7 @@ class DQNAgent():
 
         # Compute V(s_{t+1}) for all next states.
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
-
+        start = time.time()
         for state_index in range(len(non_final_next_states)):
             max_action_val_for_state = -100000000000
 
@@ -176,7 +178,7 @@ class DQNAgent():
                     max_action_val_for_state = action_val
 
             next_state_values[state_index] = max_action_val_for_state
-
+        self.total_time[4] += time.time() - start
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  # gamma max_a' Q^ (psi_new, a' | theta-) + r
 
@@ -185,7 +187,9 @@ class DQNAgent():
 
         # Optimize the model
         self.optimizer.zero_grad()
+        start = time.time()
         loss.backward()
+        self.total_time[0] += time.time() - start
         for param in self.policy_net.parameters():
             param.grad.data.clamp_(-10000, 10000)
         self.optimizer.step()
@@ -223,7 +227,7 @@ class DQNAgent():
             r_old = r_init
 
             for t in range(self.num_time_steps):
-
+                start = time.time()
                 # Select and perform an action
                 action = self.select_action(state)
                 # print("ACTION")
@@ -234,8 +238,8 @@ class DQNAgent():
                 light_mask = (( (((int(int_action) & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
 
                 # # Add visualization
-                if self.device == "cpu" and t % 10 == 0:
-                    self.viz.update()
+                # if self.device == "cpu" and t % 10 == 0:
+                #     self.viz.update()
 
                 if self.simple_test_flag:
                     positions = self.cs.state[:, :2] # temporary
@@ -278,8 +282,13 @@ class DQNAgent():
                 # Move to the next state
                 state = next_state
 
+                self.total_time[1] += time.time() - start
+
+                start = time.time()
                 # Perform one step of the optimization (on the target network)
                 self.optimize_model()
+
+                self.total_time[3] += time.time() - start
 
                 r_old = r_new
 
@@ -290,7 +299,9 @@ class DQNAgent():
             r_episode = self.cs.get_reward() - r_init
             self.final_result_per_episode.append(r_episode)
             print("Episode Reward: " + str(r_episode), "loss: ", self.cs.get_reward())
+            print("time", self.total_time)
 
+            start = time.time()
             if len(self.memory) >= self.STATS_BATCH_SIZE:
                 transitions = self.memory.sample(self.STATS_BATCH_SIZE)
                 batch = Transition(*zip(*transitions))
@@ -398,7 +409,7 @@ class DQNAgent():
 
             else:
                 dset_q[i_episode] = 0.0
-
+            self.total_time[2] += time.time() - start
             dset_rewards[i_episode] = r_episode
 
             dset_q.flush()
