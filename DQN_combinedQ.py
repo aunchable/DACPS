@@ -22,7 +22,7 @@ cudnn.benchmark = True
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-LOGNUMBER = 6
+LOGNUMBER = 7
 
 
 def binary_encode(i, n):
@@ -86,7 +86,7 @@ class DQNAgent():
         #     # self.gpu_device = torch.device("cuda")
         #     torch.set_default_tensor_type('torch.cuda.FloatTensor')
         # else:
-        self.viz = Visualizer(self.cs)
+        # self.viz = Visualizer(self.cs)
 
         self.BATCH_SIZE = 256
         self.STATS_BATCH_SIZE = 1024
@@ -215,8 +215,8 @@ class DQNAgent():
                 light_mask = action.cpu().numpy()[0]
 
                 # Add visualization
-                if t % 10 == 0:
-                    self.viz.update()
+                # if t % 10 == 0:
+                #     self.viz.update()
 
                 if self.simple_test_flag:
                     positions = self.cs.state[:, :2] # temporary
@@ -391,33 +391,37 @@ class DQNAgent():
                                   '110': [], '101': [], '011': [], '111': []}
                     pulse_action = []
 
+
                     for sample in transitions:
 
-                        curr_state = sample.state.numpy()
+                        curr_state = sample.state.numpy().reshape((3, 6))
                         centroid = np.mean(curr_state[:, :2], axis=0)
                         state_diff = [row[:2] - centroid for row in curr_state]
                         orientation_away = [np.angle(complex(row[0], row[1])) for row in state_diff]
-                        orientation_away = [x + 2 * np.pi if x < 0.0 for x in orientation_away else x]
+                        orientation_away = [x + 2 * np.pi if x < 0.0 else x for x in orientation_away]
                         orientation_towards = [x - np.pi for x in orientation_away]
-                        orientation_towards = [x + 2 * np.pi if x < 0.0 for x in orientation_towards else x]
+                        orientation_towards = [x + 2 * np.pi if x < 0.0 else x for x in orientation_towards]
 
-                        for k, _ in new_states.iterrows():
+                        pulse_action.append(torch.tensor([[1,1,1]], device = self.cpu_device, dtype = torch.float))
+
+                        for k, _ in new_states.items():
                             new_state = curr_state.copy()
                             for i, c in enumerate(k):
                                 if c == '0':
                                     new_state[i][2] = orientation_away[i]
                                 else:
                                     new_state[i][2] = orientation_towards[i]
-                            new_states[k].append(torch.tensor(new_state, device = self.device, dtype = torch.float))
+                            new_states[k].append(torch.tensor(new_state.reshape(1,18), device = self.cpu_device, dtype = torch.float))
 
-                        pulse_action.append(torch.tensor([[1,1,1]], device = self.device, dtype = torch.float))
+
 
                     pulse_action_batch = torch.cat(pulse_action)
                     new_states_batch = {}
-                    for k, v in new_states.iterrows():
+                    for k, v in new_states.items():
                         new_states_batch[k] = torch.cat(new_states[k])
 
                     # best = all three oriented towards centroid
+
                     goodq3_action_values = self.policy_net(new_states_batch['111'], pulse_action_batch)
                     dset_goodq3[i_episode] = goodq3_action_values.detach().numpy().mean()
 

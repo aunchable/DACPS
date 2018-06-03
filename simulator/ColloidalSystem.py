@@ -44,7 +44,7 @@ class ColloidalSystem:
         self.Rdelta = np.array([(x - self.Rx)*(x - self.Rx) + (y - self.Ry)*(y - self.Ry) for (x, y) in target_assembly])
         self.Rstart = np.where(self.Rindex == np.argmax(self.Rdelta))[0][0]
 
-        self.SEVEN = np.array([100, 100])
+        self.SEVEN = np.array([1000, 1000])
         self.NOT_SEVEN = - self.SEVEN
 
 
