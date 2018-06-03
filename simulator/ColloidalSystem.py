@@ -69,7 +69,7 @@ class ColloidalSystem:
                 force = minusdUrdr * dxyz
                 accel[p1_idx][:2] += (force / self.type_mass[self.particle_types[p1_idx]])
                 accel[p2_idx][:2] -= (force / self.type_mass[self.particle_types[p2_idx]])
-        # print(accel[0])
+        # print("pre Brown", accel[0])
 
         # Brownian motion
         # Linear = Gaussian with variance 2*D*t
@@ -92,7 +92,7 @@ class ColloidalSystem:
             aphi = gammar * np.sqrt(2 * Dr) * np.random.normal(0, dt**2) / moment_of_inertia
             accel[p_idx] += np.array([ax, ay, aphi])
 
-        # print(accel[0])
+        # print("post Brown pre light", accel[0], "light", light_mask[p_idx])
         # Light illumination
         for p_idx in range(self.num_particles):
             if light_mask[p_idx]:
@@ -102,7 +102,7 @@ class ColloidalSystem:
                 final_velocity = mult_factor * self.type_max_vel[particle_type] * np.array([np.cos(o), np.sin(o)])
                 accel[p_idx][:2] += (final_velocity - self.state[p_idx, 3:5]) / LIGHT_ACCEL_TIME
 
-        # print(accel[0])
+        # print("after light", accel[0])
         # a = np.copy(accel[0])
         # Drag force [Stoke's Law]
         for p_idx in range(self.num_particles):
