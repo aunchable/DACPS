@@ -185,7 +185,11 @@ class DQNAgent():
             dset_midq1 = stats_grp.create_dataset("ep_midq1", (self.num_episodes,), dtype='f')
             dset_midq2 = stats_grp.create_dataset("ep_midq2", (self.num_episodes,), dtype='f')
             dset_badq = stats_grp.create_dataset("ep_badq", (self.num_episodes,), dtype='f')
-
+        elif self.num_particles == 3:
+            dset_goodq3 = stats_grp.create_dataset("ep_goodq3", (self.num_episodes,), dtype='f')
+            dset_goodq2 = stats_grp.create_dataset("ep_goodq2", (self.num_episodes,), dtype='f')
+            dset_goodq1 = stats_grp.create_dataset("ep_goodq1", (self.num_episodes,), dtype='f')
+            dset_goodq0 = stats_grp.create_dataset("ep_goodq0", (self.num_episodes,), dtype='f')
 
         f.swmr_mode = True # NECESSARY FOR SIMULTANEOUS READ/WRITE
 
@@ -380,6 +384,64 @@ class DQNAgent():
                     dset_badq.flush()
                     dset_midq1.flush()
                     dset_midq2.flush()
+
+                elif self.num_particles == 3:
+
+                    new_states = {'000': [], '100': [], '010': [], '001': [],
+                                  '110': [], '101': [], '011': [], '111': []}
+                    pulse_action = []
+
+                    for sample in transitions:
+
+                        curr_state = sample.state.numpy()
+                        centroid = np.mean(curr_state[:, :2], axis=0)
+                        state_diff = [row[:2] - centroid for row in curr_state]
+                        orientation_away = [np.angle(complex(row[0], row[1])) for row in state_diff]
+                        orientation_away = [x + 2 * np.pi if x < 0.0 for x in orientation_away else x]
+                        orientation_towards = [x - np.pi for x in orientation_away]
+                        orientation_towards = [x + 2 * np.pi if x < 0.0 for x in orientation_towards else x]
+
+                        for k, _ in new_states.iterrows():
+                            new_state = curr_state.copy()
+                            for i, c in enumerate(k):
+                                if c == '0':
+                                    new_state[i][2] = orientation_away[i]
+                                else:
+                                    new_state[i][2] = orientation_towards[i]
+                            new_states[k].append(torch.tensor(new_state, device = self.device, dtype = torch.float))
+
+                        pulse_action.append(torch.tensor([[1,1,1]], device = self.device, dtype = torch.float))
+
+                    pulse_action_batch = torch.cat(pulse_action)
+                    new_states_batch = {}
+                    for k, v in new_states.iterrows():
+                        new_states_batch[k] = torch.cat(new_states[k])
+
+                    # best = all three oriented towards centroid
+                    goodq3_action_values = self.policy_net(new_states_batch['111'], pulse_action_batch)
+                    dset_goodq3[i_episode] = goodq3_action_values.detach().numpy().mean()
+
+                    # good = two oriented towards and one oriented away from centroid
+                    goodq2_action_values1 = self.policy_net(new_states_batch['011'], pulse_action_batch)
+                    goodq2_action_values2 = self.policy_net(new_states_batch['101'], pulse_action_batch)
+                    goodq2_action_values3 = self.policy_net(new_states_batch['110'], pulse_action_batch)
+                    dset_goodq2[i_episode] = (goodq2_action_values1.detach().numpy().mean() + goodq2_action_values2.detach().numpy().mean() + goodq2_action_values3.detach().numpy().mean()) / 3.0
+
+                    # bad = one oriented towards two one oriented away from centroid
+                    goodq1_action_values1 = self.policy_net(new_states_batch['100'], pulse_action_batch)
+                    goodq1_action_values2 = self.policy_net(new_states_batch['010'], pulse_action_batch)
+                    goodq1_action_values3 = self.policy_net(new_states_batch['001'], pulse_action_batch)
+                    dset_goodq1[i_episode] = (goodq1_action_values1.detach().numpy().mean() + goodq1_action_values2.detach().numpy().mean() + goodq1_action_values3.detach().numpy().mean()) / 3.0
+
+                    # worst = all three oriented away from centroid
+                    goodq0_action_values = self.policy_net(new_states_batch['000'], pulse_action_batch)
+                    dset_goodq0[i_episode] = goodq0_action_values.detach().numpy().mean()
+
+                    dset_goodq3.flush()
+                    dset_goodq2.flush()
+                    dset_goodq1.flush()
+                    dset_goodq0.flush()
+
 
             else:
                 dset_q[i_episode] = 0.0
