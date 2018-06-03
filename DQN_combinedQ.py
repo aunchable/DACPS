@@ -78,11 +78,12 @@ class DQNAgent():
             self.num_actions = 5
             self.action_size = 5
 
-        self.device = "cpu"
+        self.cpu_device = torch.device("cpu")
         self.dtype = torch.float
+        self.gpu_device = torch.device("cpu")
+
         if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-            self.dtype = torch.float
+            self.gpu_device = torch.device("cuda")
             torch.set_default_tensor_type('torch.cuda.FloatTensor')
         else:
             self.viz = Visualizer(self.cs)
@@ -95,8 +96,8 @@ class DQNAgent():
         self.EPS_DECAY = 500
         self.TARGET_UPDATE = 20
         self.BUFFER_SIZE = 10000
-        self.policy_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.device)
-        self.target_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.device)
+        self.policy_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.gpu_device)
+        self.target_net = DQN(self.num_actions, self.num_particles, self.state_size, self.action_size).to(self.gpu_device)
         self.optimizer = optim.RMSprop(self.policy_net.parameters(), lr=0.001)
         self.memory = ReplayMemory(self.BUFFER_SIZE)
         self.steps_done = 0
@@ -112,7 +113,7 @@ class DQNAgent():
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.steps_done / self.EPS_DECAY)
 
-        action_tensors = [torch.tensor([   binary_encode(action, self.action_size)    ], device = self.device, dtype = self.dtype) for action in range(self.num_actions)]
+        action_tensors = [torch.tensor([   binary_encode(action, self.action_size)    ], device = self.cpu_device, dtype = self.dtype) for action in range(self.num_actions)]
         action_values = np.array([self.policy_net(state, action_tensor) for action_tensor in action_tensors])
         max_action_tensor = action_tensors[np.argmax(action_values)]
 
@@ -120,7 +121,7 @@ class DQNAgent():
             with torch.no_grad():
                 return max_action_tensor
         else:
-            return torch.tensor([   binary_encode(random.randint(0, self.num_actions - 1), self.action_size)   ], device = self.device, dtype = self.dtype)
+            return torch.tensor([   binary_encode(random.randint(0, self.num_actions - 1), self.action_size)   ], device = self.cpu_device, dtype = self.dtype)
 
     def optimize_model(self):
 
@@ -148,11 +149,11 @@ class DQNAgent():
         state_action_values = self.policy_net(state_batch, action_batch)
 
         # Compute V(s_{t+1}) for all next states.
-        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
+        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.cpu_device)
         start = time.time()
 
         for state_index in range(len(non_final_next_states)):
-            action_vals = [self.target_net(non_final_next_states[state_index].view(-1, int(self.state_size*self.num_particles) ), torch.tensor([   binary_encode(a, self.action_size)     ], device = self.device, dtype = self.dtype)  ).detach() for a in range(self.num_actions)    ]
+            action_vals = [self.target_net(non_final_next_states[state_index].view(-1, int(self.state_size*self.num_particles) ), torch.tensor([   binary_encode(a, self.action_size)     ], device=self.cpu_device, dtype = self.dtype)  ).detach() for a in range(self.num_actions)    ]
             next_state_values[state_index] = max(action_vals)
 
         self.total_time[4] += time.time() - start
@@ -199,7 +200,7 @@ class DQNAgent():
             # state = self.cs.get_state()[:, :3]
             state = self.cs.get_state()
             state = [item for sublist in state for item in sublist]
-            state = torch.tensor([state], device=self.device, dtype = self.dtype)
+            state = torch.tensor([state], device=self.cpu_device, dtype = self.dtype)
             r_init = self.cs.get_reward()
             r_old = r_init
 
@@ -239,13 +240,13 @@ class DQNAgent():
 
                 # Get reward
                 r_new = self.cs.get_reward()
-                reward = torch.tensor([r_new - r_old], device=self.device, dtype = self.dtype)
+                reward = torch.tensor([r_new - r_old], device=self.cpu_device, dtype = self.dtype)
 
                 # Observe new state
                 # next_state = self.cs.get_state()[:, :3]
                 next_state = self.cs.get_state()
                 next_state = [item for sublist in next_state for item in sublist]
-                next_state = torch.tensor([next_state], device=self.device, dtype = self.dtype)
+                next_state = torch.tensor([next_state], device=self.cpu_device, dtype = self.dtype)
 
                 # Store the transition in memory
                 self.memory.push(state, action, next_state, reward)
@@ -306,8 +307,8 @@ class DQNAgent():
                                 else:
                                     good_action = [0,1,0,0,0]
                                     bad_action = [1,1,0,0,0]
-                        good_action_tensor = torch.tensor([good_action], device = self.device, dtype = self.dtype)
-                        bad_action_tensor = torch.tensor([bad_action], device = self.device, dtype = self.dtype)
+                        good_action_tensor = torch.tensor([good_action], device = self.cpu_device, dtype = self.dtype)
+                        bad_action_tensor = torch.tensor([bad_action], device = self.cpu_device, dtype = self.dtype)
                         good_actions.append(good_action_tensor)
                         bad_actions.append(bad_action_tensor)
 
@@ -345,11 +346,11 @@ class DQNAgent():
                         state_towards = curr_state.copy()
                         state_towards[2] = orientation_towards
 
-                        new_states_away.append(torch.tensor([state_away], device = self.device, dtype = self.dtype))
-                        new_states_towards.append(torch.tensor([state_towards], device = self.device, dtype = self.dtype))
+                        new_states_away.append(torch.tensor([state_away], device = self.cpu_device, dtype = self.dtype))
+                        new_states_towards.append(torch.tensor([state_towards], device = self.cpu_device, dtype = self.dtype))
 
-                        pulse_action.append(torch.tensor([[1]], device = self.device, dtype = self.dtype))
-                        nopulse_action.append(torch.tensor([[0]], device = self.device, dtype = self.dtype))
+                        pulse_action.append(torch.tensor([[1]], device = self.cpu_device, dtype = self.dtype))
+                        nopulse_action.append(torch.tensor([[0]], device = self.cpu_device, dtype = self.dtype))
 
                     new_states_away_batch = torch.cat(new_states_away)
                     new_states_towards_batch = torch.cat(new_states_towards)
