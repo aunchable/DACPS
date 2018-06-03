@@ -67,7 +67,7 @@ class DQN(nn.Module):
 class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
-        self.simple_test_flag = 1
+        self.simple_test_flag = 0
         self.viz = Visualizer(self.cs)
         self.num_particles = cs.num_particles
         self.state_size = int(6)
