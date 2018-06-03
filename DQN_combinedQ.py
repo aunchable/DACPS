@@ -198,10 +198,10 @@ class DQNAgent():
         for i_episode in range(self.num_episodes):
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
-            # self.cs.random_initialization()
-            self.cs.set_state(np.array([
-                [4000, 4000, 0, 0, 0, 0],
-            ]))
+            self.cs.random_initialization()
+            # self.cs.set_state(np.array([
+            #     [4000, 4000, 0, 0, 0, 0],
+            # ]))
 
             # state = self.cs.get_state()[:, :3]
             state = self.cs.get_state()
