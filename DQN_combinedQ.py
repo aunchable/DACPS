@@ -12,7 +12,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import time
-import pickle
 from torch.autograd import Variable
 import h5py
 from torch.backends import cudnn
@@ -26,12 +25,8 @@ Transition = namedtuple('Transition',
 LOGNUMBER = 4
 
 
-def one_hot_encode(i, n):
+def binary_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
-
-def convert_to_int(encoded):
-    encoded = encoded[0]
-    return sum([encoded[i] * 2**i for i in range(len(encoded))])
 
 class ReplayMemory(object):
 
@@ -87,12 +82,10 @@ class DQNAgent():
         self.dtype = torch.float
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
-            self.dtype = torch.dtype("cuda")
+            self.dtype = torch.float
             torch.set_default_tensor_type('torch.cuda.FloatTensor')
         else:
             self.viz = Visualizer(self.cs)
-
-
 
         self.BATCH_SIZE = 256
         self.STATS_BATCH_SIZE = 1024
@@ -109,8 +102,6 @@ class DQNAgent():
         self.steps_done = 0
         self.num_episodes = 50000
         self.num_time_steps = 250
-        self.reward_list = []
-        self.final_result_per_episode = []
 
         self.total_time = [0, 0, 0, 0, 0, 0]
 
@@ -121,23 +112,15 @@ class DQNAgent():
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
             math.exp(-1. * self.steps_done / self.EPS_DECAY)
 
-        max_Q_val = -1000000000000
-
-        max_action_tensor = torch.tensor([  one_hot_encode(0, self.action_size) ], device = self.device, dtype = self.dtype)
-
-        for action in range(self.num_actions):
-            action_tensor = torch.tensor([   one_hot_encode(action, self.action_size)    ], device = self.device, dtype = self.dtype)
-
-            action_val = self.policy_net(state, action_tensor)
-            if action_val > max_Q_val:
-                max_Q_val = action_val
-                max_action_tensor = action_tensor
+        action_tensors = [torch.tensor([   binary_encode(action, self.action_size)    ], device = self.device, dtype = self.dtype) for action in range(self.num_actions)]
+        action_values = np.array([self.policy_net(state, action_tensor) for action_tensor in action_tensors])
+        max_action_tensor = action_tensors[np.argmax(action_values)]
 
         if sample > eps_threshold:
             with torch.no_grad():
                 return max_action_tensor
         else:
-            return torch.tensor([   one_hot_encode(random.randint(0, self.num_actions - 1), self.action_size)   ], device = self.device, dtype = self.dtype)
+            return torch.tensor([   binary_encode(random.randint(0, self.num_actions - 1), self.action_size)   ], device = self.device, dtype = self.dtype)
 
     def optimize_model(self):
 
@@ -167,17 +150,11 @@ class DQNAgent():
         # Compute V(s_{t+1}) for all next states.
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
         start = time.time()
+
         for state_index in range(len(non_final_next_states)):
-            max_action_val_for_state = -100000000000
+            action_vals = [self.target_net(non_final_next_states[state_index].view(-1, int(self.state_size*self.num_particles) ), torch.tensor([   binary_encode(a, self.action_size)     ], device = self.device, dtype = self.dtype)  ).detach() for a in range(self.num_actions)    ]
+            next_state_values[state_index] = max(action_vals)
 
-            for a in range(self.num_actions):
-                action_tensor = torch.tensor([   one_hot_encode(a, self.action_size)     ], device = self.device, dtype = self.dtype)
-                action_val = self.target_net(non_final_next_states[state_index].view(-1, int(self.state_size*self.num_particles) ), action_tensor).detach() # CHECK IF THIS PART WORKS
-
-                if action_val > max_action_val_for_state:
-                    max_action_val_for_state = action_val
-
-            next_state_values[state_index] = max_action_val_for_state
         self.total_time[4] += time.time() - start
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch  # gamma max_a' Q^ (psi_new, a' | theta-) + r
@@ -230,12 +207,7 @@ class DQNAgent():
                 start = time.time()
                 # Select and perform an action
                 action = self.select_action(state)
-                # print("ACTION")
-                # print(action)
-                int_action = convert_to_int(action)
-
-                self.steps_done += 1
-                light_mask = (( (((int(int_action) & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
+                light_mask = action.cpu().numpy()[0]
 
                 # # Add visualization
                 # if self.device == "cpu" and t % 10 == 0:
@@ -268,7 +240,6 @@ class DQNAgent():
                 # Get reward
                 r_new = self.cs.get_reward()
                 reward = torch.tensor([r_new - r_old], device=self.device, dtype = self.dtype)
-                self.reward_list.append(r_new - r_old)
 
                 # Observe new state
                 # next_state = self.cs.get_state()[:, :3]
@@ -297,7 +268,6 @@ class DQNAgent():
                 self.target_net.load_state_dict(self.policy_net.state_dict())
 
             r_episode = self.cs.get_reward() - r_init
-            self.final_result_per_episode.append(r_episode)
             print("Episode Reward: " + str(r_episode), "loss: ", self.cs.get_reward())
             print("time", self.total_time)
 
@@ -360,7 +330,7 @@ class DQNAgent():
                     nopulse_action = []
 
                     for sample in transitions:
-                        curr_state = sample.state.numpy()[0]
+                        curr_state = sample.state.cpu().numpy()[0]
                         state_diff = curr_state[:2] - self.cs.target_assembly[0]
                         orientation_away = np.angle(complex(state_diff[0], state_diff[1]))
                         if orientation_away < 0.0:
@@ -414,8 +384,6 @@ class DQNAgent():
 
             dset_q.flush()
             dset_rewards.flush()
-
-        pickle.dump(self.final_result_per_episode, open( "episode_rewards.p", "wb" ))
 
         # print('Complete')
 
