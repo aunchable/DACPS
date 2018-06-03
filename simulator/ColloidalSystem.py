@@ -44,6 +44,9 @@ class ColloidalSystem:
         self.Rdelta = np.array([(x - self.Rx)*(x - self.Rx) + (y - self.Ry)*(y - self.Ry) for (x, y) in target_assembly])
         self.Rstart = np.where(self.Rindex == np.argmax(self.Rdelta))[0][0]
 
+        self.SEVEN = np.array([100, 100])
+        self.NOT_SEVEN = - self.SEVEN
+
 
     def set_state(self, init_state):
         self.state = init_state
@@ -65,10 +68,10 @@ class ColloidalSystem:
                 eps, sig = self.lj_corr_matrix[self.particle_types[p1_idx]][self.particle_types[p2_idx]]
                 dxyz = self.state[p1_idx, :2] - self.state[p2_idx, :2]
                 dr = np.sqrt(np.dot(dxyz, dxyz))
-                minusdUrdr = - 4 * eps * (12 * np.power(sig / dr, 12) - 6 * np.power(sig / dr, 6)) / dr
+                minusdUrdr = 4 * eps * (12 * np.power(sig / dr, 12) - 6 * np.power(sig / dr, 6)) / dr
                 force = minusdUrdr * dxyz
-                accel[p1_idx][:2] += (force / self.type_mass[self.particle_types[p1_idx]])
-                accel[p2_idx][:2] -= (force / self.type_mass[self.particle_types[p2_idx]])
+                accel[p1_idx][:2] += np.maximum( np.minimum( (force / self.type_mass[self.particle_types[p1_idx]]), self.SEVEN), self.NOT_SEVEN)
+                accel[p2_idx][:2] -= np.maximum( np.minimum( (force / self.type_mass[self.particle_types[p2_idx]]), self.SEVEN), self.NOT_SEVEN)
         # print("pre Brown", accel[0])
 
         # Brownian motion
@@ -87,8 +90,9 @@ class ColloidalSystem:
             mass = self.type_mass[self.particle_types[p_idx]]
             moment_of_inertia = 0.4 * mass * r * r
 
-            ax = gamma * np.sqrt(2 * D) * np.random.normal(0, dt**2) / mass
-            ay = gamma * np.sqrt(2 * D) * np.random.normal(0, dt**2) / mass
+            # ax = gamma * np.sqrt(2 * D) * np.random.normal(0, dt**2) / mass
+            # ay = gamma * np.sqrt(2 * D) * np.random.normal(0, dt**2) / mass
+            ax, ay = 0, 0
             aphi = gammar * np.sqrt(2 * Dr) * np.random.normal(0, dt**2) / moment_of_inertia
             accel[p_idx] += np.array([ax, ay, aphi])
 
@@ -158,6 +162,8 @@ class ColloidalSystem:
         # print(new_state[0])
         self.state = new_state
         self.time += dt
+
+        # print(new_state)
         return
 
 
@@ -197,25 +203,25 @@ class ColloidalSystem:
 
     def get_reward(self):
         # TODO(anish) - improve this if needed
-        # shape = self.state[:,:2]
-        # xbar, ybar = np.average(shape, axis=0)
-        # Stheta = np.array([np.arctan2(x - xbar, y - ybar) for (x, y) in shape])
-        # Sindex = np.argsort(Stheta)
-        # Sdelta = np.array([(x - xbar)*(x - xbar) + (y - ybar)*(y - ybar) for (x, y) in shape])
-        # Sstart = np.where(Sindex == np.argmax(Sdelta))[0][0]
-        #
-        # deltaLoss = np.sum([(self.Rdelta[self.Rindex[(self.Rstart + i) % self.num_particles]] - Sdelta[Sindex[(Sstart + i) % self.num_particles]])**2 for i in range(self.num_particles)])
-        # thetaLoss = np.sum([(self.Rtheta[self.Rindex[(self.Rstart + i) % self.num_particles]] - Stheta[Sindex[(Sstart + i) % self.num_particles]])**2 for i in range(self.num_particles)])
-        #
-        # return 0 - deltaLoss - thetaLoss
+        shape = self.state[:,:2]
+        xbar, ybar = np.average(shape, axis=0)
+        Stheta = np.array([np.arctan2(x - xbar, y - ybar) for (x, y) in shape])
+        Sindex = np.argsort(Stheta)
+        Sdelta = np.array([(x - xbar)*(x - xbar) + (y - ybar)*(y - ybar) for (x, y) in shape])
+        Sstart = np.where(Sindex == np.argmax(Sdelta))[0][0]
+        
+        deltaLoss = np.sum([(self.Rdelta[self.Rindex[(self.Rstart + i) % self.num_particles]] - Sdelta[Sindex[(Sstart + i) % self.num_particles]])**2 for i in range(self.num_particles)])
+        thetaLoss = np.sum([(self.Rtheta[self.Rindex[(self.Rstart + i) % self.num_particles]] - Stheta[Sindex[(Sstart + i) % self.num_particles]])**2 for i in range(self.num_particles)])
+        
+        return 0 - deltaLoss - thetaLoss
 
-        positions = self.state[:, :2]
-        target_positions = self.target_assembly
+        # positions = self.state[:, :2]
+        # target_positions = self.target_assembly
         #
         # centered_positions = positions - np.mean(positions, axis = 0)
         # centered_target_positions = target_positions - np.mean(target_positions, axis = 0)
         #
         # transform = np.array(la.orthogonal_procrustes(centered_positions, centered_target_positions)[0])
         # distance = np.linalg.norm(transform - np.identity(2))
-        distance = -np.abs(sum(positions[0] - target_positions[0] ))
-        return distance
+        # distance = -np.abs(sum(positions[0] - target_positions[0] ))
+        # return distance

@@ -22,7 +22,7 @@ cudnn.benchmark = True
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-LOGNUMBER = 4
+LOGNUMBER = 6
 
 
 def binary_encode(i, n):
@@ -86,7 +86,7 @@ class DQNAgent():
         #     # self.gpu_device = torch.device("cuda")
         #     torch.set_default_tensor_type('torch.cuda.FloatTensor')
         # else:
-        #     self.viz = Visualizer(self.cs)
+        self.viz = Visualizer(self.cs)
 
         self.BATCH_SIZE = 256
         self.STATS_BATCH_SIZE = 1024
@@ -194,7 +194,7 @@ class DQNAgent():
             # Initialize the environment and state
             # self.cs.random_initialization()
             self.cs.set_state(np.array([
-                [4000, 4000, 0, 0, 0, 0],
+                [4000, 2268, 0, 0, 0, 0], [2500, 4866, 0, 0, 0, 0], [5500, 4866, 0, 0, 0, 0]
             ]))
 
             # state = self.cs.get_state()[:, :3]
@@ -210,9 +210,9 @@ class DQNAgent():
                 action = self.select_action(state)
                 light_mask = action.cpu().numpy()[0]
 
-                # # Add visualization
-                # if self.device == "cpu" and t % 10 == 0:
-                #     self.viz.update()
+                # Add visualization
+                if t % 10 == 0:
+                    self.viz.update()
 
                 if self.simple_test_flag:
                     positions = self.cs.state[:, :2] # temporary
@@ -231,7 +231,7 @@ class DQNAgent():
                         positions[0][1]-=8
                 else:
                     for j in range(400):
-                        # self.cs.step(0.001, [i_episode%2])
+                        # self.cs.step(0.001, [i_episode%2, i_episode%2, i_episode%2])
                         self.cs.step(0.001, light_mask)
 
                 # # # Add visualization
@@ -239,8 +239,11 @@ class DQNAgent():
                 #     print(self.cs.get_state()[:,5])
 
                 # Get reward
+                # print(self.cs.get_state())
                 r_new = self.cs.get_reward()
+                # print(r_new)
                 reward = torch.tensor([r_new - r_old], device=self.cpu_device, dtype = self.dtype)
+                # print(reward)
 
                 # Observe new state
                 # next_state = self.cs.get_state()[:, :3]
@@ -394,14 +397,16 @@ if __name__ == "__main__":
     type_infos = [
         # id, radius, propensity
         ["jeb", 1000, 5],
+        # ["shiet", 1000, 5],
+        # ["goteem", 1000, 5],
         # ["shiet", 1200, 420],
         # ["goteem", 1300, 420]
     ]
 
-    type_counts = [1]
+    type_counts = [3]
     # type_counts = [1, 1, 1]
 
-    lj_corr_matrix = [[(np.random.random(), np.random.random())]]
+    lj_corr_matrix = [[(1.8e-7, 0.892*3000)]]
 
     # lj_corr_matrix = [
     #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())],
@@ -409,7 +414,7 @@ if __name__ == "__main__":
     #     [(np.random.random(), np.random.random()), (np.random.random(), np.random.random()), (np.random.random(), np.random.random())]
     # ]
 
-    target_assembly = np.array([[4000, 4000]])
+    target_assembly = np.array([[4000, 2268], [2500, 4866], [5500, 4866]])
 
     cs = ColloidalSystem(worldsize,
                          type_infos,
