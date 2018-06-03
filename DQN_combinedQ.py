@@ -15,18 +15,23 @@ import time
 import pickle
 from torch.autograd import Variable
 import h5py
+from torch.backends import cudnn
+
+cudnn.benchmark = True
+
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 LOGNUMBER = 4
 
+
 def one_hot_encode(i, n):
     return (( (((int(i) & (1 << np.arange(n)))) > 0).astype(int) ).tolist() )
 
 def convert_to_int(encoded):
-    encoded = encoded[0].numpy()
-    return sum(encoded*np.array([2**i for i in range(len(encoded))]) )
+    encoded = encoded[0]
+    return sum([encoded[i] * 2**i for i in range(len(encoded))])
 
 class ReplayMemory(object):
 
@@ -68,7 +73,7 @@ class DQNAgent():
     def __init__(self, cs):
         self.cs = cs
         self.simple_test_flag = 0
-        self.viz = Visualizer(self.cs)
+        self.viz = None
         self.num_particles = cs.num_particles
         self.state_size = int(6)
         self.action_size = cs.num_particles
@@ -78,7 +83,17 @@ class DQNAgent():
             self.num_actions = 5
             self.action_size = 5
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = "cpu"
+        self.dtype = torch.float
+        if torch.cuda.is_available():
+            self.device = torch.device("cuda")
+            self.dtype = torch.dtype("cuda")
+            torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        else:
+            self.viz = Visualizer(self.cs)
+
+
+
         self.BATCH_SIZE = 256
         self.STATS_BATCH_SIZE = 1024
         self.GAMMA = 0.999
@@ -106,10 +121,10 @@ class DQNAgent():
 
         max_Q_val = -1000000000000
 
-        max_action_tensor = torch.tensor([  one_hot_encode(0, self.action_size) ], device = self.device, dtype = torch.float)
+        max_action_tensor = torch.tensor([  one_hot_encode(0, self.action_size) ], device = self.device, dtype = self.dtype)
 
         for action in range(self.num_actions):
-            action_tensor = torch.tensor([   one_hot_encode(action, self.action_size)    ], device = self.device, dtype = torch.float)
+            action_tensor = torch.tensor([   one_hot_encode(action, self.action_size)    ], device = self.device, dtype = self.dtype)
 
             action_val = self.policy_net(state, action_tensor)
             if action_val > max_Q_val:
@@ -120,7 +135,7 @@ class DQNAgent():
             with torch.no_grad():
                 return max_action_tensor
         else:
-            return torch.tensor([   one_hot_encode(random.randint(0, self.num_actions - 1), self.action_size)   ], device = self.device, dtype = torch.float)
+            return torch.tensor([   one_hot_encode(random.randint(0, self.num_actions - 1), self.action_size)   ], device = self.device, dtype = self.dtype)
 
     def optimize_model(self):
 
@@ -134,8 +149,6 @@ class DQNAgent():
         batch = Transition(*zip(*transitions))
 
         # Compute a mask of non-final states and concatenate the batch elements
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                              batch.next_state)), device=self.device, dtype=torch.uint8)
         non_final_next_states = torch.cat([s for s in batch.next_state
                                                     if s is not None])
 
@@ -153,11 +166,10 @@ class DQNAgent():
         next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device)
 
         for state_index in range(len(non_final_next_states)):
-            # if non_final_mask[state_index]:
             max_action_val_for_state = -100000000000
 
             for a in range(self.num_actions):
-                action_tensor = torch.tensor([   one_hot_encode(a, self.action_size)     ], device = self.device, dtype = torch.float)
+                action_tensor = torch.tensor([   one_hot_encode(a, self.action_size)     ], device = self.device, dtype = self.dtype)
                 action_val = self.target_net(non_final_next_states[state_index].view(-1, int(self.state_size*self.num_particles) ), action_tensor).detach() # CHECK IF THIS PART WORKS
 
                 if action_val > max_action_val_for_state:
@@ -206,7 +218,7 @@ class DQNAgent():
             # state = self.cs.get_state()[:, :3]
             state = self.cs.get_state()
             state = [item for sublist in state for item in sublist]
-            state = torch.tensor([state], device=self.device, dtype = torch.float)
+            state = torch.tensor([state], device=self.device, dtype = self.dtype)
             r_init = self.cs.get_reward()
             r_old = r_init
 
@@ -222,7 +234,7 @@ class DQNAgent():
                 light_mask = (( (((int(int_action) & (1 << np.arange(self.num_particles)))) > 0).astype(int) ).tolist() )
 
                 # # Add visualization
-                if t % 10 == 0:
+                if self.device == "cpu" and t % 10 == 0:
                     self.viz.update()
 
                 if self.simple_test_flag:
@@ -251,14 +263,14 @@ class DQNAgent():
 
                 # Get reward
                 r_new = self.cs.get_reward()
-                reward = torch.tensor([r_new - r_old], device=self.device, dtype = torch.float)
+                reward = torch.tensor([r_new - r_old], device=self.device, dtype = self.dtype)
                 self.reward_list.append(r_new - r_old)
 
                 # Observe new state
                 # next_state = self.cs.get_state()[:, :3]
                 next_state = self.cs.get_state()
                 next_state = [item for sublist in next_state for item in sublist]
-                next_state = torch.tensor([next_state], device=self.device, dtype = torch.float)
+                next_state = torch.tensor([next_state], device=self.device, dtype = self.dtype)
 
                 # Store the transition in memory
                 self.memory.push(state, action, next_state, reward)
@@ -313,8 +325,8 @@ class DQNAgent():
                                 else:
                                     good_action = [0,1,0,0,0]
                                     bad_action = [1,1,0,0,0]
-                        good_action_tensor = torch.tensor([good_action], device = self.device, dtype = torch.float)
-                        bad_action_tensor = torch.tensor([bad_action], device = self.device, dtype = torch.float)
+                        good_action_tensor = torch.tensor([good_action], device = self.device, dtype = self.dtype)
+                        bad_action_tensor = torch.tensor([bad_action], device = self.device, dtype = self.dtype)
                         good_actions.append(good_action_tensor)
                         bad_actions.append(bad_action_tensor)
 
@@ -352,11 +364,11 @@ class DQNAgent():
                         state_towards = curr_state.copy()
                         state_towards[2] = orientation_towards
 
-                        new_states_away.append(torch.tensor([state_away], device = self.device, dtype = torch.float))
-                        new_states_towards.append(torch.tensor([state_towards], device = self.device, dtype = torch.float))
+                        new_states_away.append(torch.tensor([state_away], device = self.device, dtype = self.dtype))
+                        new_states_towards.append(torch.tensor([state_towards], device = self.device, dtype = self.dtype))
 
-                        pulse_action.append(torch.tensor([[1]], device = self.device, dtype = torch.float))
-                        nopulse_action.append(torch.tensor([[0]], device = self.device, dtype = torch.float))
+                        pulse_action.append(torch.tensor([[1]], device = self.device, dtype = self.dtype))
+                        nopulse_action.append(torch.tensor([[0]], device = self.device, dtype = self.dtype))
 
                     new_states_away_batch = torch.cat(new_states_away)
                     new_states_towards_batch = torch.cat(new_states_towards)
