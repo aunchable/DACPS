@@ -82,11 +82,11 @@ class DQNAgent():
         self.dtype = torch.float
         self.gpu_device = torch.device("cpu")
 
-        if torch.cuda.is_available():
-            self.gpu_device = torch.device("cuda")
-            torch.set_default_tensor_type('torch.cuda.FloatTensor')
-        else:
-            self.viz = Visualizer(self.cs)
+        # if torch.cuda.is_available():
+        #     # self.gpu_device = torch.device("cuda")
+        #     torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        # else:
+        #     self.viz = Visualizer(self.cs)
 
         self.BATCH_SIZE = 256
         self.STATS_BATCH_SIZE = 1024
@@ -192,10 +192,10 @@ class DQNAgent():
         for i_episode in range(self.num_episodes):
             print("EPISODE: " + str(i_episode))
             # Initialize the environment and state
-            self.cs.random_initialization()
-            # self.cs.set_state(np.array([
-            #     [4000, 4000, 0, 0, 0, 0],
-            # ]))
+            # self.cs.random_initialization()
+            self.cs.set_state(np.array([
+                [4000, 4000, 0, 0, 0, 0],
+            ]))
 
             # state = self.cs.get_state()[:, :3]
             state = self.cs.get_state()
