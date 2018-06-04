@@ -1,4 +1,5 @@
 simulator/__pycache__/
 logging/
+plots/
 .ipynb_checkpoints/
 .DS_Store
